@@ -69,12 +69,20 @@ glm::vec3 calculateRandomDirectionInHemisphere(
 __host__ __device__
 void scatterRay(
         Ray &ray,
-        glm::vec3 &color,
-        glm::vec3 intersect,
-        glm::vec3 normal,
+				ShadeableIntersection intersection,
+				glm::vec3 intersect_point,
         const Material &m,
         thrust::default_random_engine &rng) {
     // TODO: implement this.
     // A basic implementation of pure-diffuse shading will just call the
     // calculateRandomDirectionInHemisphere defined above.
+	glm::vec3 newDirection;
+	if (m.hasReflective > 0.0) {
+		newDirection = glm::reflect(ray.direction, intersection.surfaceNormal);
+	}
+	else {
+		newDirection = calculateRandomDirectionInHemisphere(intersection.surfaceNormal, rng);
+	}
+	ray.direction = newDirection;
+	ray.origin = intersect_point;
 }

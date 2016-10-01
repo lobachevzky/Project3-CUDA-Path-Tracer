@@ -1,6 +1,10 @@
 #include "main.h"
 #include "preview.h"
 #include <cstring>
+#include <thrust/remove.h>
+#include <thrust/execution_policy.h>
+#include <thrust/device_ptr.h>
+#include <thrust/device_vector.h>
 
 static std::string startTimeString;
 
@@ -31,6 +35,8 @@ int height;
 //-------------------------------
 
 int main(int argc, char** argv) {
+
+
     startTimeString = currentTimeString();
 
     if (argc < 2) {

@@ -4,6 +4,7 @@
 #include <thrust/execution_policy.h>
 #include <thrust/random.h>
 #include <thrust/remove.h>
+#include <thrust/device_vector.h>
 
 #include "sceneStructs.h"
 #include "scene.h"
@@ -103,11 +104,11 @@ void pathtraceInit(Scene *scene) {
   	cudaMalloc(&dev_geoms, scene->geoms.size() * sizeof(Geom));
   	cudaMemcpy(dev_geoms, scene->geoms.data(), scene->geoms.size() * sizeof(Geom), cudaMemcpyHostToDevice);
 
-		cudaMalloc(&dev_materials, scene->materials.size() * sizeof(Material));
-		cudaMemcpy(dev_materials, scene->materials.data(), scene->materials.size() * sizeof(Material), cudaMemcpyHostToDevice);
+	cudaMalloc(&dev_materials, scene->materials.size() * sizeof(Material));
+	cudaMemcpy(dev_materials, scene->materials.data(), scene->materials.size() * sizeof(Material), cudaMemcpyHostToDevice);
 
-		cudaMalloc(&dev_intersections, pixelcount * sizeof(ShadeableIntersection));
-		cudaMemset(dev_intersections, 0, pixelcount * sizeof(ShadeableIntersection));
+	cudaMalloc(&dev_intersections, pixelcount * sizeof(ShadeableIntersection));
+	cudaMemset(dev_intersections, 0, pixelcount * sizeof(ShadeableIntersection));
 
     // TODO: initialize any extra device memeory you need
 
@@ -313,6 +314,15 @@ __global__ void finalGather(int nPaths, glm::vec3 * image, PathSegment * iterati
 	}
 }
 
+struct is_even
+{
+	__host__ __device__
+		bool operator()(const int x)
+	{
+		return (x % 2) == 0;
+	}
+};
+
 /**
  * Wrapper for the __global__ call that sets up the kernel calls and does a ton
  * of memory management
@@ -361,6 +371,24 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
     //   for you.
 
     // TODO: perform one iteration of path tracing
+
+
+
+	const int N = 6;
+	int A[N] = { 1, 4, 2, 8, 5, 7 };
+	int *dev_A;
+	cudaMalloc(&dev_A, N * sizeof(int));
+	cudaMemcpy(dev_A, &A[0], N * sizeof(int), cudaMemcpyHostToDevice);
+
+	thrust::device_vector<int> D(dev_A, dev_A + N);
+
+	thrust::remove_if(thrust::device, D.begin(), D.end(), is_even());
+	if (iter < 3) {
+	for (int i = 0; i < D.size(); i++) {
+		std::cout << "D[" << i << "] = " << D[i] << std::endl;
+	}
+	}
+	return;
 
 	generateRayFromCamera <<<blocksPerGrid2d, blockSize2d >>>(cam, iter, traceDepth, dev_paths);
 	checkCUDAError("generate camera ray");

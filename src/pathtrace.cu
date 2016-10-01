@@ -15,7 +15,7 @@
 #include "interactions.h"
 
 #define ERRORCHECK 1
-#define DEBUG 1
+#define DEBUG 0
 
 #if DEBUG
 #define debug(...) printf(__VA_ARGS__);
@@ -155,6 +155,7 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
 			);
 
 		segment.pixelIndex = index;
+		int idx = index;
 		segment.remainingBounces = traceDepth;
 	}
 }
@@ -275,18 +276,19 @@ __global__ void shadeMaterial (
       // If the material indicates that the object was a light, "light" the ray
       if (material.emittance > 0.0f) {
         //segment.color *= materialColor;
-        segment.color *= 0;
-				segment.remainingBounces = 0;
+        segment.color *= 0; 
+		segment.remainingBounces = 0;
       }
       // Otherwise, recolor.
       else {
-				debugHit("idx: %d; origin: %f %f %f", idx, 
-					intersection.point.x,
-					intersection.point.y,
-					intersection.point.z);
-				scatterRay(segment.ray, intersection, material, rng);
-				segment.color *= materialColor;
-				segment.remainingBounces--;
+		  debugHit("\nidx: %d; origin: %f %f %f; remaining bounces: %d", idx,
+				intersection.point.x,
+				intersection.point.y,
+				intersection.point.z,
+				segment.remainingBounces);
+			scatterRay(segment.ray, intersection, material, rng);
+			segment.color *= materialColor;
+			segment.remainingBounces--;
       }
     // If there was no intersection, color the ray black.
     // Lots of renderers use 4 channel color, RGBA, where A = alpha, often
@@ -369,6 +371,7 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 	// --- PathSegment Tracing Stage ---
 	// Shoot ray into scene, bounce between objects, push shading chunks
 
+	int i = 0;
   bool iterationComplete = false;
 	while (!iterationComplete) {
 
@@ -390,7 +393,7 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 	cudaDeviceSynchronize();
 
 
-	// TODO:
+	// TODO
 	// --- Shading Stage ---
 	// Shade path segments based on intersections and generate new rays by
   // evaluating the BSDF.
@@ -405,11 +408,12 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
     dev_intersections,
     dev_paths,
     dev_materials
-  );
-	if (iter++ > 10) {
-  iterationComplete = true; // TODO: should be based off stream compaction results.
-	}
-	}
+  ); 
+  if (i++ > 3) { 
+	  debug("\nHERE\n");
+	  iterationComplete = true; // TODO: should be based off stream compaction results. 
+  } 
+}
 
   // Assemble this iteration and apply it to the image
   dim3 numBlocksPixels = (pixelcount + blockSize1d - 1) / blockSize1d;

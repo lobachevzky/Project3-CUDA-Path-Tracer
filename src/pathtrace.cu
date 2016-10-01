@@ -15,15 +15,17 @@
 #include "interactions.h"
 
 #define ERRORCHECK 1
-#define DEBUG 0
+#define DEBUG 1
 
 #if DEBUG
 #define debug(...) printf(__VA_ARGS__);
 #define debug0(...) if (idx == 0) { printf(__VA_ARGS__); }
+#define debugHit(...) if (idx == 113061) { printf(__VA_ARGS__); }
 #define debug4000(...) if (idx == 4000) { printf(__VA_ARGS__); }
 #else
 #define debug(...) {}
 #define debug0(...) {}
+#define debugHit(...) {}
 #define debug4000(...) {}
 #endif
 
@@ -158,8 +160,7 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
 }
 
 __global__ void pathTraceOneBounce(
-	int depth
-	, int num_paths
+	  int num_paths
 	, PathSegment * pathSegments
 	, Geom * geoms
 	, int geoms_size
@@ -215,22 +216,19 @@ __global__ void pathTraceOneBounce(
 			}
 		}
 
+		ShadeableIntersection &intersection = intersections[path_index];
 		if (hit_geom_index == -1)
 		{
-			intersections[path_index].t = -1.0f;
-			segment.remainingBounces = 0;
+			int idx = path_index;
+			intersection.t = -1.0f;
 		}
 		else
 		{
 			//The ray hits something
-			ShadeableIntersection &intersection = intersections[path_index];
-			intersections[path_index].t = t_min;
-			intersections[path_index].materialId = geoms[hit_geom_index].materialid;
-			intersections[path_index].surfaceNormal = normal;
-			intersections[path_index].incoming = -segment.ray.direction;
-      thrust::default_random_engine rng = makeSeededRandomEngine(iter, path_index, 0);
-			scatterRay(segment.ray, intersection, intersect_point,
-				materialArray[intersection.materialId], rng);
+			intersection.t = t_min;
+			intersection.materialId = geoms[hit_geom_index].materialid;
+			intersection.surfaceNormal = normal;
+			intersection.point = intersect_point;
 		}
 	}
 }
@@ -257,8 +255,8 @@ __global__ void shadeMaterial (
   PathSegment &segment = pathSegments[idx];
 
 	///////////////
-	if (segment.remainingBounces == 0) {
-		segment.color = glm::vec3(0);
+	if (segment.remainingBounces == 0)
+	{
 		return;
 	}
 	////////////
@@ -276,26 +274,27 @@ __global__ void shadeMaterial (
 
       // If the material indicates that the object was a light, "light" the ray
       if (material.emittance > 0.0f) {
-        pathSegments[idx].color *= (materialColor * material.emittance);
+        //segment.color *= materialColor;
+        segment.color *= 0;
+				segment.remainingBounces = 0;
       }
       // Otherwise, recolor.
       else {
-				glm::vec3 r;
-				if (intersection.reflective) {
-					r = glm::reflect(intersection.incoming, intersection.surfaceNormal);
-				}
-				else {
-					r = intersection.surfaceNormal;
-				}
-				segment.color = materialColor * glm::dot(intersection.incoming, r);
+				//debugHit("idx: %d; origin: %f %f %f", idx, 
+				//	intersection.point.x,
+				//	intersection.point.y,
+				//	intersection.point.z);
+				scatterRay(segment.ray, intersection, material, rng);
+				segment.color *= materialColor;
+				segment.remainingBounces--;
       }
     // If there was no intersection, color the ray black.
     // Lots of renderers use 4 channel color, RGBA, where A = alpha, often
     // used for opacity, in which case they can indicate "no opacity".
     // This can be useful for post-processing and image compositing.
     } else {
-      pathSegments[idx].color = glm::vec3(0.0f);
-			pathSegments[idx].remainingBounces = 0;
+			segment.color *= 0;
+			segment.remainingBounces = 0;
     }
   }
 }
@@ -379,7 +378,7 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 	// tracing
 	dim3 numblocksPathSegmentTracing = (num_paths + blockSize1d - 1) / blockSize1d;
 	pathTraceOneBounce <<<numblocksPathSegmentTracing, blockSize1d>>> (
-		, num_paths
+		  num_paths
 		, dev_paths
 		, dev_geoms
 		, hst_scene->geoms.size()
@@ -407,9 +406,8 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
     dev_paths,
     dev_materials
   );
-	if (iter++ > 5) {
+	if (iter++ > 10) {
   iterationComplete = true; // TODO: should be based off stream compaction results.
-
 	}
 	}
 

@@ -71,7 +71,6 @@ __host__ __device__
 void scatterRay(
         Ray &ray,
 				ShadeableIntersection intersection,
-				glm::vec3 intersect_point,
         const Material &m,
         thrust::default_random_engine &rand) {
     // TODO: implement this.
@@ -80,13 +79,11 @@ void scatterRay(
 	glm::vec3 newDirection;
 	thrust::uniform_real_distribution<float> coinToss(0, 1);
 
-	if (m.hasReflective > 0.0 && coinToss(rand) > 0.5) {
+	if (m.hasReflective > 0.0) { // && coinToss(rand) > 0.5) {
 			newDirection = glm::reflect(ray.direction, intersection.surfaceNormal);
-			intersection.reflective = 1;
 	} else {
 		newDirection = calculateRandomDirectionInHemisphere(intersection.surfaceNormal, rand);
-		intersection.reflective = 0;
 	}
 	ray.direction = newDirection;
-	ray.origin = intersect_point + (intersection.surfaceNormal * epsilon);
+	ray.origin = intersection.point + (intersection.surfaceNormal * epsilon);
 }

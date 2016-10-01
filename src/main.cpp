@@ -190,6 +190,7 @@ void mousePositionCallback(GLFWwindow* window, double xpos, double ypos) {
     Camera &cam = renderState->camera;
     glm::vec3 forward = cam.view;
     forward.y = 0.0f;
+
     forward = glm::normalize(forward);
     glm::vec3 right = cam.right;
     right.y = 0.0f;

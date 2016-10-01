@@ -280,10 +280,10 @@ __global__ void shadeMaterial (
       }
       // Otherwise, recolor.
       else {
-				//debugHit("idx: %d; origin: %f %f %f", idx, 
-				//	intersection.point.x,
-				//	intersection.point.y,
-				//	intersection.point.z);
+				debugHit("idx: %d; origin: %f %f %f", idx, 
+					intersection.point.x,
+					intersection.point.y,
+					intersection.point.z);
 				scatterRay(segment.ray, intersection, material, rng);
 				segment.color *= materialColor;
 				segment.remainingBounces--;

@@ -294,9 +294,9 @@ __global__ void shadeMaterial (
     // Lots of renderers use 4 channel color, RGBA, where A = alpha, often
     // used for opacity, in which case they can indicate "no opacity".
     // This can be useful for post-processing and image compositing.
-    } else {
-			segment.color *= 0;
-			segment.remainingBounces = 0;
+    } else { 
+		segment.color *= 0; 
+		segment.remainingBounces = 0;
     }
   }
 }
@@ -409,7 +409,27 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
     dev_paths,
     dev_materials
   ); 
-  if (i++ > 3) { 
+
+  struct noMoreBounces
+  {
+	  __host__ __device__
+		  bool operator()(const PathSegment s)
+	  {
+		  return (s.remainingBounces == 0);
+	  }
+  };
+
+  printf("TEST TEST1");
+  ShadeableIntersection* end_intersections = thrust::remove_if(
+	  dev_intersections, dev_intersections + num_paths, dev_paths, noMoreBounces());
+  PathSegment* end_paths = thrust::remove_if(dev_paths, dev_paths + num_paths, noMoreBounces());
+  printf("TEST TEST2");
+
+	//int num_intersections = end_intersections - dev_intersections;
+	//int num_paths = end_paths - dev_paths;
+	//assert(num_intersections == num_paths);
+  //if (num_paths == 0) { 
+  if (i == 3) {
 	  debug("\nHERE\n");
 	  iterationComplete = true; // TODO: should be based off stream compaction results. 
   } 

@@ -87,7 +87,7 @@ static glm::vec3 * dev_image = NULL;
 static Geom * dev_geoms = NULL;
 static Material * dev_materials = NULL;
 static PathSegment * dev_paths = NULL;
-static ShadeableIntersection * dev_intersections = NULL;
+static ShadeableIntersection * dev_intersects = NULL;
 // TODO: static variables for device memory, any extra info you need, etc
 // ...
 
@@ -107,8 +107,8 @@ void pathtraceInit(Scene *scene) {
 	cudaMalloc(&dev_materials, scene->materials.size() * sizeof(Material));
 	cudaMemcpy(dev_materials, scene->materials.data(), scene->materials.size() * sizeof(Material), cudaMemcpyHostToDevice);
 
-	cudaMalloc(&dev_intersections, pixelcount * sizeof(ShadeableIntersection));
-	cudaMemset(dev_intersections, 0, pixelcount * sizeof(ShadeableIntersection));
+	cudaMalloc(&dev_intersects, pixelcount * sizeof(ShadeableIntersection));
+	cudaMemset(dev_intersects, 0, pixelcount * sizeof(ShadeableIntersection));
 
     // TODO: initialize any extra device memeory you need
 
@@ -120,7 +120,7 @@ void pathtraceFree() {
   	cudaFree(dev_paths);
   	cudaFree(dev_geoms);
   	cudaFree(dev_materials);
-  	cudaFree(dev_intersections);
+  	cudaFree(dev_intersects);
     // TODO: clean up any extra device memory you created
 
     checkCUDAError("pathtraceFree");
@@ -323,6 +323,16 @@ struct is_even
 	}
 };
 
+struct noMoreBounces
+{
+  __host__ __device__
+	  bool operator()(const PathSegment s)
+  {
+	  return (s.remainingBounces == 0);
+  }
+};
+
+
 /**
  * Wrapper for the __global__ call that sets up the kernel calls and does a ton
  * of memory management
@@ -376,19 +386,28 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 
 	const int N = 6;
 	int A[N] = { 1, 4, 2, 8, 5, 7 };
+	int B[N] = { 1, 1, 0, 0, 0, 7 };
 	int *dev_A;
+	int *dev_B;
 	cudaMalloc(&dev_A, N * sizeof(int));
 	cudaMemcpy(dev_A, &A[0], N * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMalloc(&dev_B, N * sizeof(int));
+	cudaMemcpy(dev_B, &B[0], N * sizeof(int), cudaMemcpyHostToDevice);
 
-	thrust::device_vector<int> D(dev_A, dev_A + N);
+	thrust::device_ptr<int> D(&dev_A[0]);
+	thrust::device_ptr<int> E(&dev_B[0]);
 
-	thrust::remove_if(thrust::device, D.begin(), D.end(), is_even());
+	thrust::device_ptr<int> end = thrust::remove_if(D, D + N, E, is_even());
+	const int M = end - D;
 	if (iter < 3) {
-	for (int i = 0; i < D.size(); i++) {
-		std::cout << "D[" << i << "] = " << D[i] << std::endl;
+	for (int i = 0; i < M; i++) {
+		//std::cout << "D[" << i << "] = " << D[i] << std::endl;
+	}
+	for (int i = 0; i < N; i++) {
+		//std::cout << "E[" << i << "] = " << E[i] << std::endl;
 	}
 	}
-	return;
+	//return;
 
 	generateRayFromCamera <<<blocksPerGrid2d, blockSize2d >>>(cam, iter, traceDepth, dev_paths);
 	checkCUDAError("generate camera ray");
@@ -404,7 +423,7 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 	while (!iterationComplete) {
 
 	// clean shading chunks
-	cudaMemset(dev_intersections, 0, pixelcount * sizeof(ShadeableIntersection));
+	cudaMemset(dev_intersects, 0, pixelcount * sizeof(ShadeableIntersection));
 
 	// tracing
 	dim3 numblocksPathSegmentTracing = (num_paths + blockSize1d - 1) / blockSize1d;
@@ -413,7 +432,7 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 		, dev_paths
 		, dev_geoms
 		, hst_scene->geoms.size()
-		, dev_intersections
+		, dev_intersects
 		, dev_materials
 		, iter
 		);
@@ -433,31 +452,35 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
   shadeMaterial<<<numblocksPathSegmentTracing, blockSize1d>>> (
     iter,
     num_paths,
-    dev_intersections,
+    dev_intersects,
     dev_paths,
     dev_materials
   ); 
 
-  struct noMoreBounces
-  {
-	  __host__ __device__
-		  bool operator()(const PathSegment s)
-	  {
-		  return (s.remainingBounces == 0);
-	  }
-  };
+  thrust::device_ptr<ShadeableIntersection> thrust_intersects(dev_intersects);
+  thrust::device_ptr<PathSegment> thrust_paths(dev_paths);
+  thrust::device_ptr<ShadeableIntersection> end_intersects;
+  thrust::device_ptr<PathSegment> end_paths;
 
-  printf("TEST TEST1");
-  ShadeableIntersection* end_intersections = thrust::remove_if(
-	  dev_intersections, dev_intersections + num_paths, dev_paths, noMoreBounces());
-  PathSegment* end_paths = thrust::remove_if(dev_paths, dev_paths + num_paths, noMoreBounces());
+  printf("test test1");
+  end_intersects = thrust::remove_if(
+	  thrust_intersects, thrust_intersects + num_paths, thrust_paths, noMoreBounces()
+  );
+  end_paths = thrust::remove_if(
+	  thrust_paths, thrust_paths + num_paths, noMoreBounces()
+  );
+  num_paths = end_paths - thrust_paths;
+  assert(num_paths == end_intersect - thrust_intersects);
+
+  dev_paths = thrust::raw_pointer_cast(thrust_paths);
+  dev_intersects = thrust::raw_pointer_cast(thrust_intersects);
   printf("TEST TEST2");
 
-	//int num_intersections = end_intersections - dev_intersections;
+	//int num_intersections = end_intersections - dev_intersects;
 	//int num_paths = end_paths - dev_paths;
 	//assert(num_intersections == num_paths);
   //if (num_paths == 0) { 
-  if (i == 3) {
+  if (num_paths == 0) {
 	  debug("\nHERE\n");
 	  iterationComplete = true; // TODO: should be based off stream compaction results. 
   } 

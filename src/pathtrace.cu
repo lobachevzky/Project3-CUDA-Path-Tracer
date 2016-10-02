@@ -256,7 +256,7 @@ __global__ void shadeMaterial (
   if (idx < num_paths)
   {
     ShadeableIntersection intersection = shadeableIntersections[idx];
-    if (intersection.t > 0.0f && segment.remainingBounces > 0) { // if the intersection exists...
+    if (intersection.t > 0.0f) { // if the intersection exists...
       // Set up the RNG
       thrust::default_random_engine rng = makeSeededRandomEngine(iter, idx, 0);
       thrust::uniform_real_distribution<float> u01(0, 1);
@@ -444,26 +444,17 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 	  iterationComplete = 1;
   }
 
-  thrust::device_ptr<ShadeableIntersection> thrust_intersects = thrust::device_pointer_cast(dev_intersects);
-  thrust::device_ptr<PathSegment> thrust_paths = thrust::device_pointer_cast(dev_paths);
+  //thrust::device_ptr<PathSegment> thrust_paths = thrust::device_pointer_cast(dev_paths);
+  thrust::device_ptr<PathSegment> thrust_paths(dev_paths);
 
-  //thrust::device_ptr<ShadeableIntersection> end_intersects;
   //thrust::device_ptr<PathSegment> end_paths;
-
-  thrust::device_ptr<ShadeableIntersection> end_intersects(dev_intersects + num_paths);
   thrust::device_ptr<PathSegment> end_paths(dev_paths + num_paths);
 
-  //end_intersects = thrust::remove_if(
-	 // thrust_intersects, thrust_intersects + num_paths, thrust_paths, noMoreBounces()
-  //);
-  //end_paths = thrust::remove_if(
-	 // thrust_paths, thrust_paths + num_paths, noMoreBounces()
-  //);
+  end_paths = thrust::remove_if(
+	  thrust_paths, thrust_paths + num_paths, noMoreBounces()
+  );
   num_paths = end_paths - thrust_paths;
-  assert(num_paths == end_intersects - thrust_intersects);
-
   dev_paths = thrust::raw_pointer_cast(thrust_paths);
-  dev_intersects = thrust::raw_pointer_cast(thrust_intersects);
 
   //debug("num_paths ", num_paths);
   if (num_paths == 0) {

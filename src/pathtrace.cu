@@ -16,7 +16,7 @@
 #include "interactions.h"
 
 #define ERRORCHECK 1
-#define DEBUG 0
+#define DEBUG 1
 
 #if DEBUG
 #define debug(...) printf(__VA_ARGS__);
@@ -176,9 +176,6 @@ __global__ void pathTraceOneBounce(
 	if (path_index < num_paths)
 	{
 		PathSegment &segment = pathSegments[path_index];
-		////////////
-		if (segment.remainingBounces == 0) return;
-		/////////////
 
 		float t;
 		glm::vec3 intersect_point;
@@ -256,48 +253,38 @@ __global__ void shadeMaterial (
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
   PathSegment &segment = pathSegments[idx];
 
-	///////////////
-	if (segment.remainingBounces == 0)
-	{
-		return;
-	}
-	////////////
-
   if (idx < num_paths)
   {
     ShadeableIntersection intersection = shadeableIntersections[idx];
-    if (intersection.t > 0.0f) { // if the intersection exists...
+    if (intersection.t > 0.0f && segment.remainingBounces > 0) { // if the intersection exists...
       // Set up the RNG
       thrust::default_random_engine rng = makeSeededRandomEngine(iter, idx, 0);
       thrust::uniform_real_distribution<float> u01(0, 1);
 
       Material material = materials[intersection.materialId];
-      glm::vec3 materialColor = material.color;
+      segment.color *= material.color;
 
       // If the material indicates that the object was a light, "light" the ray
       if (material.emittance > 0.0f) {
-        //segment.color *= materialColor;
-        segment.color *= 0; 
-		segment.remainingBounces = 0;
+        segment.remainingBounces = 0;
       }
       // Otherwise, recolor.
       else {
-		  debugHit("\nidx: %d; origin: %f %f %f; remaining bounces: %d", idx,
-				intersection.point.x,
-				intersection.point.y,
-				intersection.point.z,
-				segment.remainingBounces);
-			scatterRay(segment.ray, intersection, material, rng);
-			segment.color *= materialColor;
-			segment.remainingBounces--;
+		  //debugHit("\nidx: %d; origin: %f %f %f; remaining bounces: %d", idx,
+				//intersection.point.x,
+				//intersection.point.y,
+				//intersection.point.z,
+				//segment.remainingBounces);
+        scatterRay(segment.ray, intersection, material, rng);
+        segment.remainingBounces--;
       }
     // If there was no intersection, color the ray black.
     // Lots of renderers use 4 channel color, RGBA, where A = alpha, often
     // used for opacity, in which case they can indicate "no opacity".
     // This can be useful for post-processing and image compositing.
     } else { 
-		segment.color *= 0; 
-		segment.remainingBounces = 0;
+      segment.color *= 0; 
+      segment.remainingBounces = 0;
     }
   }
 }
@@ -381,49 +368,46 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
     //   for you.
 
     // TODO: perform one iteration of path tracing
+  //const int N = 6;
+  //int A[N] = { 1, 4, 2, 8, 5, 7 };
+  //int B[N] = { 1, 1, 0, 0, 0, 7 };
+  //int *dev_A;
+  //int *dev_B;
+  //cudaMalloc(&dev_A, N * sizeof(int));
+  //cudaMemcpy(dev_A, &A[0], N * sizeof(int), cudaMemcpyHostToDevice);
+  //cudaMalloc(&dev_B, N * sizeof(int));
+  //cudaMemcpy(dev_B, &B[0], N * sizeof(int), cudaMemcpyHostToDevice);
 
+  //thrust::device_ptr<int> D(&dev_A[0]);
+  //thrust::device_ptr<int> E(&dev_B[0]);
 
+  //thrust::device_ptr<int> end = thrust::remove_if(D, D + N, E, is_even());
+  //const int M = end - D;
+  //if (iter < 3) {
+  //  for (int i = 0; i < M; i++) {
+  //    //std::cout << "D[" << i << "] = " << D[i] << std::endl;
+  //  }
+  //  for (int i = 0; i < N; i++) {
+  //    //std::cout << "E[" << i << "] = " << E[i] << std::endl;
+  //  }
+  //}
 
-	const int N = 6;
-	int A[N] = { 1, 4, 2, 8, 5, 7 };
-	int B[N] = { 1, 1, 0, 0, 0, 7 };
-	int *dev_A;
-	int *dev_B;
-	cudaMalloc(&dev_A, N * sizeof(int));
-	cudaMemcpy(dev_A, &A[0], N * sizeof(int), cudaMemcpyHostToDevice);
-	cudaMalloc(&dev_B, N * sizeof(int));
-	cudaMemcpy(dev_B, &B[0], N * sizeof(int), cudaMemcpyHostToDevice);
-
-	thrust::device_ptr<int> D(&dev_A[0]);
-	thrust::device_ptr<int> E(&dev_B[0]);
-
-	thrust::device_ptr<int> end = thrust::remove_if(D, D + N, E, is_even());
-	const int M = end - D;
-	if (iter < 3) {
-	for (int i = 0; i < M; i++) {
-		//std::cout << "D[" << i << "] = " << D[i] << std::endl;
-	}
-	for (int i = 0; i < N; i++) {
-		//std::cout << "E[" << i << "] = " << E[i] << std::endl;
-	}
-	}
-	//return;
 
 	generateRayFromCamera <<<blocksPerGrid2d, blockSize2d >>>(cam, iter, traceDepth, dev_paths);
 	checkCUDAError("generate camera ray");
 
 	PathSegment* dev_path_end = dev_paths + pixelcount;
-	int num_paths = dev_path_end - dev_paths;
+  int num_paths = pixelcount;
 
 	// --- PathSegment Tracing Stage ---
 	// Shoot ray into scene, bounce between objects, push shading chunks
 
 	int i = 0;
-  bool iterationComplete = false;
+	bool iterationComplete = false;
 	while (!iterationComplete) {
 
 	// clean shading chunks
-	cudaMemset(dev_intersects, 0, pixelcount * sizeof(ShadeableIntersection));
+	//cudaMemset(dev_intersects, 0, pixelcount * sizeof(ShadeableIntersection)); TODO: should this be here?
 
 	// tracing
 	dim3 numblocksPathSegmentTracing = (num_paths + blockSize1d - 1) / blockSize1d;
@@ -456,34 +440,36 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
     dev_paths,
     dev_materials
   ); 
+  if (i++ > 2) {
+	  iterationComplete = 1;
+  }
 
-  thrust::device_ptr<ShadeableIntersection> thrust_intersects(dev_intersects);
-  thrust::device_ptr<PathSegment> thrust_paths(dev_paths);
-  thrust::device_ptr<ShadeableIntersection> end_intersects;
-  thrust::device_ptr<PathSegment> end_paths;
+  thrust::device_ptr<ShadeableIntersection> thrust_intersects = thrust::device_pointer_cast(dev_intersects);
+  thrust::device_ptr<PathSegment> thrust_paths = thrust::device_pointer_cast(dev_paths);
 
-  printf("test test1");
-  end_intersects = thrust::remove_if(
-	  thrust_intersects, thrust_intersects + num_paths, thrust_paths, noMoreBounces()
-  );
-  end_paths = thrust::remove_if(
-	  thrust_paths, thrust_paths + num_paths, noMoreBounces()
-  );
+  //thrust::device_ptr<ShadeableIntersection> end_intersects;
+  //thrust::device_ptr<PathSegment> end_paths;
+
+  thrust::device_ptr<ShadeableIntersection> end_intersects(dev_intersects + num_paths);
+  thrust::device_ptr<PathSegment> end_paths(dev_paths + num_paths);
+
+  //end_intersects = thrust::remove_if(
+	 // thrust_intersects, thrust_intersects + num_paths, thrust_paths, noMoreBounces()
+  //);
+  //end_paths = thrust::remove_if(
+	 // thrust_paths, thrust_paths + num_paths, noMoreBounces()
+  //);
   num_paths = end_paths - thrust_paths;
-  assert(num_paths == end_intersect - thrust_intersects);
+  assert(num_paths == end_intersects - thrust_intersects);
 
   dev_paths = thrust::raw_pointer_cast(thrust_paths);
   dev_intersects = thrust::raw_pointer_cast(thrust_intersects);
-  printf("TEST TEST2");
 
-	//int num_intersections = end_intersections - dev_intersects;
-	//int num_paths = end_paths - dev_paths;
-	//assert(num_intersections == num_paths);
-  //if (num_paths == 0) { 
+  //debug("num_paths ", num_paths);
   if (num_paths == 0) {
-	  debug("\nHERE\n");
 	  iterationComplete = true; // TODO: should be based off stream compaction results. 
   } 
+
 }
 
   // Assemble this iteration and apply it to the image

@@ -30,7 +30,7 @@ EMITTANCE   0
 
 // Diffuse green
 MATERIAL 3
-RGB         .35 .85 .35
+RGB         .35 .35 .85
 SPECEX      0
 SPECRGB     0 0 0
 REFL        0

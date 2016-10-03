@@ -135,7 +135,6 @@ void runCuda() {
 
     if (iteration < renderState->iterations) {
         uchar4 *pbo_dptr = NULL;
-        iteration++;
         cudaGLMapBufferObject((void**)&pbo_dptr, pbo);
 
         // execute the kernel
@@ -144,6 +143,7 @@ void runCuda() {
 
         // unmap buffer object
         cudaGLUnmapBufferObject(pbo);
+        iteration++;
     } else {
         saveImage();
         pathtraceFree();

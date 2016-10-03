@@ -20,13 +20,12 @@
 #define sort_by_material 0
 #define DEBUG 1
 #define lightIdx 170050
-#define randIdx 150000
-#define randIdx 150000
+#define whiteIdx 50000
 
 #if DEBUG
-#define debug(...) if (iter == 1) { printf(__VA_ARGS__); }
+#define debug(...) if (iter < 10) { printf(__VA_ARGS__); }
 #define debugLight(...) if (index == lightIdx && iter < 4) { printf(__VA_ARGS__); }
-#define debugRand(...) if (index == randIdx && iter < 4) { printf(__VA_ARGS__); }
+#define debugRand(...) if (index == whiteIdx && iter < 4) { printf(__VA_ARGS__); }
 #else
 #define debug(...) {}
 #define debugLight(...) {}
@@ -431,7 +430,7 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 
 		// tracing
 		dim3 numblocksPathSegmentTracing = (pixelcount + blockSize1d - 1) / blockSize1d; // TODO: keeping this constant
-		if (iter == 0 || i >= 0) {
+		if (iter == 0 || i > 0) {
 			pathTraceOneBounce <<<numblocksPathSegmentTracing, blockSize1d>>> (
 					num_paths
 				, dev_paths
@@ -442,12 +441,18 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 				, iter
 			); 
 		}
+
+		debug("iter: %d, i: %d\n", iter, i);
 		if (iter == 0 && i == 0) {
+			debug("copy\n");
 			cudaMemcpy(
-				dev_1stBounce, dev_intersects, num_paths * sizeof(ShadeableIntersection), cudaMemcpyDeviceToDevice);
+				dev_1stBounce, dev_intersects, 
+				num_paths * sizeof(ShadeableIntersection), cudaMemcpyDeviceToDevice);
 		}
 		if (iter > 0 && i == 0) {
-			dev_intersects = dev_1stBounce;
+			cudaMemcpy(
+				dev_intersects, dev_1stBounce, 
+				num_paths * sizeof(ShadeableIntersection), cudaMemcpyDeviceToDevice);
 		}
 
 		checkCUDAError("trace one bounce");
@@ -493,6 +498,7 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 		if (num_paths == 0) {
 			iterationComplete = true; // TODO: should be based off stream compaction results. 
 		} 
+		i++;
 	}
 
   // Assemble this iteration and apply it to the image

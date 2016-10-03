@@ -89,7 +89,8 @@ static glm::vec3 *dev_image = NULL;
 static Geom *dev_geoms = NULL;
 static Material *dev_materials = NULL;
 static PathSegment *dev_paths = NULL;
-static ShadeableIntersection *dev_1stBounce = NULL;
+static PathSegment *dev_1stPaths = NULL;
+static ShadeableIntersection *dev_1stIntersects = NULL;
 static glm::vec3 *dev_pixels = NULL;
 static ShadeableIntersection *dev_intersects = NULL;
 // TODO: static variables for device memory, any extra info you need, etc
@@ -104,7 +105,8 @@ void pathtraceInit(Scene *scene) {
 	cudaMemset(dev_image, 0, pixelcount * sizeof(glm::vec3));
 
 	cudaMalloc(&dev_paths, pixelcount * sizeof(PathSegment));
-	cudaMalloc(&dev_1stBounce, pixelcount * sizeof(ShadeableIntersection));
+	cudaMalloc(&dev_1stPaths, pixelcount * sizeof(ShadeableIntersection));
+	cudaMalloc(&dev_1stIntersects, pixelcount * sizeof(ShadeableIntersection));
 	cudaMalloc(&dev_pixels, pixelcount * sizeof(glm::vec3));
 
 	cudaMalloc(&dev_geoms, scene->geoms.size() * sizeof(Geom));
@@ -124,8 +126,9 @@ void pathtraceInit(Scene *scene) {
 void pathtraceFree() {
     cudaFree(dev_image);  // no-op if dev_image is null
   	cudaFree(dev_paths);
+  	cudaFree(dev_1stPaths);
   	cudaFree(dev_pixels);
-  	cudaFree(dev_1stBounce);
+  	cudaFree(dev_1stIntersects);
   	cudaFree(dev_geoms);
   	cudaFree(dev_materials);
   	cudaFree(dev_intersects);
@@ -145,7 +148,11 @@ void pathtraceFree() {
 * motion blur - jitter rays "in time"
 * lens effect - jitter ray origin positions based on a lens
 */
-__global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, PathSegment* pathSegments)
+__global__ void generateRayFromCamera(
+	const Camera cam, 
+	const int iter, 
+	const int traceDepth,
+	PathSegment* pathSegments)
 {
 	int x = (blockIdx.x * blockDim.x) + threadIdx.x;
 	int y = (blockIdx.y * blockDim.y) + threadIdx.y;
@@ -413,11 +420,21 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 	//return;
 
 
-	checkCUDAError("before generate camera ray");
-	generateRayFromCamera <<<blocksPerGrid2d, blockSize2d >>>(cam, iter, traceDepth, dev_paths);
-	checkCUDAError("generate camera ray");
+    int num_paths = pixelcount;
+	if (iter == 0) {
+		checkCUDAError("before generate camera ray");
+		generateRayFromCamera <<<blocksPerGrid2d, blockSize2d >>>(cam, iter, traceDepth, dev_paths);
+		checkCUDAError("generate camera ray");
+		cudaMemcpy(
+			dev_1stPaths, dev_paths, 
+			num_paths * sizeof(PathSegment), cudaMemcpyDeviceToDevice);
+	}
+	else {
+		cudaMemcpy(
+			dev_paths, dev_1stPaths, 
+			num_paths * sizeof(PathSegment), cudaMemcpyDeviceToDevice);
+	}
 
-  int num_paths = pixelcount;
 
 	// --- PathSegment Tracing Stage ---
 	// Shoot ray into scene, bounce between objects, push shading chunks
@@ -442,16 +459,14 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 			); 
 		}
 
-		debug("iter: %d, i: %d\n", iter, i);
 		if (iter == 0 && i == 0) {
-			debug("copy\n");
 			cudaMemcpy(
-				dev_1stBounce, dev_intersects, 
+				dev_1stIntersects, dev_intersects, 
 				num_paths * sizeof(ShadeableIntersection), cudaMemcpyDeviceToDevice);
 		}
 		if (iter > 0 && i == 0) {
 			cudaMemcpy(
-				dev_intersects, dev_1stBounce, 
+				dev_intersects, dev_1stIntersects, 
 				num_paths * sizeof(ShadeableIntersection), cudaMemcpyDeviceToDevice);
 		}
 

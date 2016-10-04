@@ -18,6 +18,7 @@
 #define ERRORCHECK 1
 
 #define sort_by_material 0
+#define cache_1st_bounce 1
 #define DEBUG 1
 #define lightIdx 170050
 #define whiteIdx 50000
@@ -397,31 +398,8 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 
 
 
-
-	//if (iter < 2) {
-	//const int N = 6;
-	//int A[N] = { 1, 4, 2, 8, 5, 7 };
-	//int B[N];
-	//int *dev_A;
-
-	//cudaMalloc(&dev_A, N * sizeof(int));
-	//cudaMemcpy(dev_A, &A[0], N * sizeof(int), cudaMemcpyHostToDevice);
-	//thrust::device_ptr<int> D(&dev_A[0]);
-
-	//thrust::device_ptr<int> end = thrust::remove_if(D, D + N, is_even());
-	//const int M = end - D;
-	//
-	//cudaMemcpy(B, dev_A, N * sizeof(int), cudaMemcpyDeviceToHost);
-
-	//  for (int i = 0; i < M; i++) {
-	//    std::cout << "B[" << i << "] = " << B[i] << std::endl;
-	//  }
-	//}
-	//return;
-
-
     int num_paths = pixelcount;
-	if (iter == 0) {
+	if (iter == 0 || !cache_1st_bounce) {
 		checkCUDAError("before generate camera ray");
 		generateRayFromCamera <<<blocksPerGrid2d, blockSize2d >>>(cam, iter, traceDepth, dev_paths);
 		checkCUDAError("generate camera ray");
@@ -447,7 +425,7 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 
 		// tracing
 		dim3 numblocksPathSegmentTracing = (pixelcount + blockSize1d - 1) / blockSize1d; // TODO: keeping this constant
-		if (iter == 0 || i > 0) {
+		if (iter == 0 || i > 0 || !cache_1st_bounce) {
 			pathTraceOneBounce <<<numblocksPathSegmentTracing, blockSize1d>>> (
 					num_paths
 				, dev_paths
@@ -459,12 +437,12 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 			); 
 		}
 
-		if (iter == 0 && i == 0) {
+		if (iter == 0 && i == 0 && cache_1st_bounce) {
 			cudaMemcpy(
 				dev_1stIntersects, dev_intersects, 
 				num_paths * sizeof(ShadeableIntersection), cudaMemcpyDeviceToDevice);
 		}
-		if (iter > 0 && i == 0) {
+		if (iter > 0 && i == 0 && cache_1st_bounce) {
 			cudaMemcpy(
 				dev_intersects, dev_1stIntersects, 
 				num_paths * sizeof(ShadeableIntersection), cudaMemcpyDeviceToDevice);

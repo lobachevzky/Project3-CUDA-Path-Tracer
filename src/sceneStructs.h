@@ -15,7 +15,7 @@ enum GeomType {
 struct Ray {
     glm::vec3 origin;
     glm::vec3 direction;
-	//int insideObject;
+	int insideObject;
 };
 
 struct Geom {
@@ -62,7 +62,7 @@ struct RenderState {
 
 struct PathSegment {
 	Ray ray;
-  glm::vec3 color;
+	glm::vec3 color;
 	int pixelIndex;
 	int remainingBounces;
 };

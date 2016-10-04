@@ -108,12 +108,11 @@ void scatterRay(
 	}
 	if (refract) { 
 		assert(m.hasRefractive > 0.0f);
-		//ray.insideObject = !ray.insideObject;
-		//debugRefract("insideObject: %d\n", ray.insideObject);
+		ray.insideObject = !ray.insideObject;
+		debugRefract("insideObject: %d\n", ray.insideObject);
 		debugRefract("indexOfRefract: %d\n", m.indexOfRefraction);
 		//float eta = insideObject ? 1.0f / m.indexOfRefraction : m.indexOfRefraction;
-		//float eta = ray.insideObject ? 0.66 : 1.5;
-		float eta = 0.66;
+		float eta = ray.insideObject ? 0.66 : 1.5;
 		ray.direction = glm::refract(ray.direction, intersection.surfaceNormal, eta);
 	}
 	if (!reflect && !refract) {

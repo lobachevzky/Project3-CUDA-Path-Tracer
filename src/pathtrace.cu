@@ -19,19 +19,20 @@
 
 #define sort_by_material 0
 #define cache_1st_bounce 0
-#define depth_blur_const 0.1f
+#define depth_blur_const 0.00f
 #define DEBUG 1
 #define lightIdx 170050
-#define whiteIdx 50000
+#define refractIdx 310062
+#define printIters 2
 
 #if DEBUG
-#define debug(...) if (iter < 10) { printf(__VA_ARGS__); }
-#define debugLight(...) if (index == lightIdx && iter < 4) { printf(__VA_ARGS__); }
-#define debugRand(...) if (index == whiteIdx && iter < 4) { printf(__VA_ARGS__); }
+#define debug(...) if (iter < printIters) { printf(__VA_ARGS__); }
+#define debugLight(...) if (index == lightIdx && iter < printIters) { printf(__VA_ARGS__); }
+#define debugRefract(...) if (index == refractIdx && iter < printIters) { printf(__VA_ARGS__); }
 #else
 #define debug(...) {}
 #define debugLight(...) {}
-#define debugRand(...) {}
+#define debugRefract(...) {}
 #endif
 
 
@@ -185,6 +186,7 @@ __global__ void generateRayFromCamera(
 		segment.pixelIndex = index;
 		int idx = index;
 		segment.remainingBounces = traceDepth;
+		//segment.ray.insideObject = 0;
 	}
 }
 
@@ -204,6 +206,9 @@ __global__ void pathTraceOneBounce(
 
 	PathSegment segment = pathSegments[path_index];
 
+	int index = segment.pixelIndex;
+	debugRefract("1\n");
+
 	float distance_from_origin;
 	glm::vec3 intersect_point;
 	glm::vec3 normal;
@@ -216,6 +221,7 @@ __global__ void pathTraceOneBounce(
 
 	// naive parse through global geoms
 
+	debugRefract("2\n");
 	for (int i = 0; i < geoms_size; i++)
 	{
 		Geom geom = geoms[i];
@@ -241,6 +247,7 @@ __global__ void pathTraceOneBounce(
 			normal = tmp_normal;
 		}
 	}
+	debugRefract("3\n");
 
 	ShadeableIntersection &intersection = intersections[path_index];
 	if (hit_geom_index == -1)
@@ -255,6 +262,7 @@ __global__ void pathTraceOneBounce(
 		intersection.surfaceNormal = normal;
 		intersection.point = intersect_point;
 	}
+	debugRefract("4\n");
 }
 
 void __device__ finalize(PathSegment &segment, glm::vec3 *pixels) {
@@ -292,7 +300,9 @@ __global__ void shadeMaterial (
   PathSegment &segment = pathSegments[idx];
 
 	if (idx >= num_paths) return;
+	int index = segment.pixelIndex;
 
+	//debugRefract("assert(segment.remainingBounces > 0)\n");
 	assert(segment.remainingBounces > 0);
 
 	ShadeableIntersection intersection = shadeableIntersections[idx];
@@ -304,6 +314,8 @@ __global__ void shadeMaterial (
 		if (material.emittance > 0.0f) {
 			segment.color *= material.emittance;
 			finalize(segment, pixels);
+			glm::vec3 l = intersection.point;
+			debugRefract("Hit Light: %f %f %f\n\n", l.x, l.y, l.z);
 		}
 		// Otherwise, rescatter.
 		else {
@@ -313,16 +325,34 @@ __global__ void shadeMaterial (
 				return thrust::default_random_engine(h);
 			}*/
 			thrust::default_random_engine rng = makeSeededRandomEngine(iter, idx, segment.remainingBounces);
-			scatterRay(segment.ray, intersection, material, rng);
+
+			glm::vec3 o = segment.ray.origin;
+			glm::vec3 d = segment.ray.direction;
+			glm::vec3 n = intersection.surfaceNormal;
+			if (material.hasRefractive > 0.0) {
+				debugRefract("Hit Refractive Material \n")
+			}
+			debugRefract("Origin: %2f %2f %2f\n", o.x, o.y, o.z);
+			debugRefract("Dir: %2f %2f %2f\n", d.x, d.y, d.z);
+			debugRefract("Normal: %2f %2f %2f\n", n.x, n.y, n.z);
+			debugRefract("Remaining bounces: %d\n", segment.remainingBounces);
+
+			scatterRay(segment.ray, intersection, material, rng, segment.pixelIndex, iter);
+
 			decrementBounces(segment, pixels);
-		}
-		// If there was no intersection, color the ray black.
+			if (segment.remainingBounces == 0) {
+				debugRefract("Ran out of bounces\n\n");
+			}
+		} // If there was no intersection, color the ray black.
 		// Lots of renderers use 4 channel color, RGBA, where A = alpha, often
 		// used for opacity, in which case they can indicate "no opacity".
 		// This can be useful for post-processing and image compositing.
 	} else { 
 		segment.color *= 0; 
 		finalize(segment, pixels);
+		glm::vec3 c = segment.color;
+		debugRefract("color: %f %f %f\n", c.x, c.y, c.z);
+		debugRefract("Went to space\n\n");
 	}
 }
 
@@ -407,6 +437,15 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 
     // TODO: perform one iteration of path tracing
 
+	//if (iter > 0) return;
+	//glm::vec3 v(1.0, 0.0, 0.0);
+	//glm::vec3 n(-1.0, -1.0, 0.0);
+	//glm::vec3 r = glm::refract(v, n, 0.5f); 
+	//debug("%f %f %f\n", r.x, r.y, r.z);
+	//r = glm::refract(r, n, 10000.0f);
+	//debug("%f %f %f\n", r.x, r.y, r.z);
+	//return;
+
 
 
     int num_paths = pixelcount;
@@ -446,20 +485,21 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 				, dev_materials
 				, iter
 			); 
+			checkCUDAError("trace one bounce");
 		}
 
 		if (iter == 0 && i == 0 && cache_1st_bounce) {
 			cudaMemcpy(
 				dev_1stIntersects, dev_intersects, 
 				num_paths * sizeof(ShadeableIntersection), cudaMemcpyDeviceToDevice);
+			checkCUDAError("memCpy to dev_1stIntersects");
 		}
 		if (iter > 0 && i == 0 && cache_1st_bounce) {
 			cudaMemcpy(
 				dev_intersects, dev_1stIntersects, 
 				num_paths * sizeof(ShadeableIntersection), cudaMemcpyDeviceToDevice);
+			checkCUDAError("memCpy to dev_intersects");
 		}
-
-		checkCUDAError("trace one bounce");
 		cudaDeviceSynchronize();
 
 		// TODO

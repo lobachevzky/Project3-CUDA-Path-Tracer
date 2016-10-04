@@ -1,6 +1,20 @@
 #pragma once
 
 #include "intersections.h"
+#define DEBUG 1
+#define lightIdx 170050
+#define refractIdx 310062
+#define printIters 2
+
+#if DEBUG
+#define debug(...) if (iter < printIters) { printf(__VA_ARGS__); }
+#define debugLight(...) if (index == lightIdx && iter < printIters) { printf(__VA_ARGS__); }
+#define debugRefract(...) if (index == refractIdx && iter < printIters) { printf(__VA_ARGS__); }
+#else
+#define debug(...) {}
+#define debugLight(...) {}
+#define debugRefract(...) {}
+#endif
 
 // CHECKITOUT
 /**
@@ -69,24 +83,41 @@ glm::vec3 calculateRandomDirectionInHemisphere(
 __host__ __device__
 void scatterRay(
         Ray &ray,
-				ShadeableIntersection intersection,
+		ShadeableIntersection intersection,
         const Material &m,
-        thrust::default_random_engine &rand) {
+        thrust::default_random_engine &rand,
+		int index, 
+		int iter) {
     // TODO: implement this.
     // A basic implementation of pure-diffuse shading will just call the
     // calculateRandomDirectionInHemisphere defined above.
 
 	thrust::uniform_real_distribution<float> u01(0, 1);
+	int reflect, refract;
 	if (m.hasReflective > 0.0 && m.hasRefractive > 0) {
+		float ratio = m.hasReflective / m.hasRefractive;
+		reflect = 0.5 > u01(rand);
+		refract = !reflect;
 	}
-	if (m.hasReflective > 0.0) {
+	else {
+		reflect = m.hasReflective > 0.0;
+		refract = m.hasRefractive > 0.0;
+	}
+	if (reflect) {
 		ray.direction = glm::reflect(ray.direction, intersection.surfaceNormal);
 	}
-	if (m.hasReflective > 0.0) {
-		ray.direction = glm::reflect(ray.direction, intersection.surfaceNormal);
+	if (refract) { 
+		assert(m.hasRefractive > 0.0f);
+		//ray.insideObject = !ray.insideObject;
+		//debugRefract("insideObject: %d\n", ray.insideObject);
+		debugRefract("indexOfRefract: %d\n", m.indexOfRefraction);
+		//float eta = insideObject ? 1.0f / m.indexOfRefraction : m.indexOfRefraction;
+		//float eta = ray.insideObject ? 0.66 : 1.5;
+		float eta = 0.66;
+		ray.direction = glm::refract(ray.direction, intersection.surfaceNormal, eta);
 	}
-	if (m.hasReflective == 0 && m.hasRefractive == 0) {
+	if (!reflect && !refract) {
 		ray.direction = calculateRandomDirectionInHemisphere(intersection.surfaceNormal, rand);
 	} 
-	ray.origin = intersection.point +(intersection.surfaceNormal * EPSILON);
+	ray.origin = intersection.point + (ray.direction * EPSILON);
 }

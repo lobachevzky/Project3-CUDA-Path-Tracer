@@ -1,7 +1,6 @@
 #pragma once
 
 #include "intersections.h"
-#define epsilon 0.00001f
 
 // CHECKITOUT
 /**
@@ -78,10 +77,16 @@ void scatterRay(
     // calculateRandomDirectionInHemisphere defined above.
 
 	thrust::uniform_real_distribution<float> u01(0, 1);
-	if (m.hasReflective > 0.0 && u01(rand) < .8) {
-		ray.direction = glm::reflect(ray.direction, intersection.surfaceNormal);
-	} else {
-		ray.direction = calculateRandomDirectionInHemisphere(intersection.surfaceNormal, rand);
+	if (m.hasReflective > 0.0 && m.hasRefractive > 0) {
 	}
-	ray.origin = intersection.point +(intersection.surfaceNormal * epsilon);
+	if (m.hasReflective > 0.0) {
+		ray.direction = glm::reflect(ray.direction, intersection.surfaceNormal);
+	}
+	if (m.hasReflective > 0.0) {
+		ray.direction = glm::reflect(ray.direction, intersection.surfaceNormal);
+	}
+	if (m.hasReflective == 0 && m.hasRefractive == 0) {
+		ray.direction = calculateRandomDirectionInHemisphere(intersection.surfaceNormal, rand);
+	} 
+	ray.origin = intersection.point +(intersection.surfaceNormal * EPSILON);
 }

@@ -18,7 +18,8 @@
 #define ERRORCHECK 1
 
 #define sort_by_material 0
-#define cache_1st_bounce 1
+#define cache_1st_bounce 0
+#define depth_blur_const 0.1f
 #define DEBUG 1
 #define lightIdx 170050
 #define whiteIdx 50000
@@ -159,10 +160,20 @@ __global__ void generateRayFromCamera(
 	int y = (blockIdx.y * blockDim.y) + threadIdx.y;
 
 	if (x < cam.resolution.x && y < cam.resolution.y) {
+
+
 		int index = x + (y * cam.resolution.x);
 		PathSegment & segment = pathSegments[index];
 
-		segment.ray.origin = cam.position;
+		thrust::default_random_engine rng = makeSeededRandomEngine(x, y, 0);
+		thrust::uniform_real_distribution<float> u01(0, 1);
+
+		float jx = u01(rng) * depth_blur_const;
+		float jy = u01(rng) * depth_blur_const;
+		float jz = u01(rng) * depth_blur_const;
+		glm::vec3 jitter(jx, jy, jz);
+
+		segment.ray.origin = cam.position + jitter;
 		segment.color = glm::vec3(1.0f);
 
 		// TODO: implement antialiasing by jittering the ray

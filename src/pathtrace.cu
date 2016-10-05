@@ -175,9 +175,7 @@ __global__ void generateRayFromCamera(
 
 	if (x < raysXAxis && y < raysYAxis) {
 
-    int pixel_x = x / raysPerPixelAxis;
-    int pixel_y = y / raysPerPixelAxis;
-    int pixelIdx = (cam.resolution.x * pixel_y) + pixel_x;
+    int pixelIdx = (cam.resolution.x * y / raysPerPixelAxis) + (x / raysPerPixelAxis);
 
     int pixelOffset_x = x % raysPerPixelAxis;
     int pixelOffset_y = y % raysPerPixelAxis;
@@ -185,9 +183,9 @@ __global__ void generateRayFromCamera(
     int index = (pixelIdx * raysPerPixel) 
       + (raysPerPixelAxis * pixelOffset_y) + pixelOffset_x;
 
-    debugN("pixel_x: %d, pixel_y: %d, pixelIdx: %d\n", pixel_x, pixel_y, pixelIdx);
-    debugN("rayX: %d, rayY: %d\n", pixelOffset_x, pixelOffset_y);
-    debugN("x: %d, y: %d\n", x, y);
+    //debugN("pixel_x: %d, pixel_y: %d, pixelIdx: %d\n", pixel_x, pixel_y, pixelIdx);
+    //debugN("rayX: %d, rayY: %d\n", pixelOffset_x, pixelOffset_y);
+    //debugN("x: %d, y: %d\n", x, y);
 
 		PathSegment & segment = pathSegments[index];
 
@@ -207,7 +205,7 @@ __global__ void generateRayFromCamera(
 		glm::vec3 pixel_dir = cam.view
 			+ cam.right * cam.pixelLength.x / (float)raysPerPixelAxis
 			* ((float)cam.resolution.x * raysPerPixelAxis * 0.5f - (float)x)
-			= cam.up * cam.pixelLength.y / (float)raysPerPixelAxis
+			+ cam.up * cam.pixelLength.y / (float)raysPerPixelAxis
 			* ((float)cam.resolution.y * raysPerPixelAxis * 0.5f - (float)y);
 
 		glm::vec3 pixel = cam.position + glm::normalize(pixel_dir) * depthOfField;
@@ -325,6 +323,8 @@ __global__ void shadeMaterial (
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
   PathSegment &segment = pathSegments[idx];
 
+  int index = idx;
+
 	if (idx >= num_paths) return;
 
 	assert(segment.remainingBounces > 0);
@@ -334,11 +334,14 @@ __global__ void shadeMaterial (
 		Material material = materials[intersection.materialId];
 		segment.color *= material.color;
 
+    debugRefract("Shaded\n");
+
 		// If the material indicates that the object was a light, "light" the ray
 		if (material.emittance > 0.0f) {
 			segment.color *= material.emittance;
 			finalize(segment, colors);
 			glm::vec3 l = intersection.point;
+      debugRefract("Hit Light\n");
 		}
 		// Otherwise, rescatter.
 		else {
@@ -351,6 +354,9 @@ __global__ void shadeMaterial (
 
 			scatterRay(segment.ray, intersection, material, rng);
 			decrementBounces(segment, colors);
+      if (segment.remainingBounces == 0) {
+        debugRefract("Out of Bounces\n");
+      }
 
 		} // If there was no intersection, color the ray black.
 		// Lots of renderers use 4 channel color, RGBA, where A = alpha, often
@@ -360,6 +366,7 @@ __global__ void shadeMaterial (
 		segment.color *= 0; 
 		finalize(segment, colors);
 		glm::vec3 c = segment.color;
+    debugRefract("No Hit\n");
 	}
 }
 
@@ -367,16 +374,16 @@ __global__ void shadeMaterial (
 __global__ void finalGather(int pixelcount, int resolutionX,
 	glm::vec3 *image, glm::vec3 *colors)
 {
-	int index = (blockIdx.x * blockDim.x) + threadIdx.x;
+	int idx = (blockIdx.x * blockDim.x) + threadIdx.x;
 
-	if (index < pixelcount)
+	if (idx < pixelcount)
 	{
 		//PathSegment iterationPath = iterationPaths[index];
 		glm::vec3 newColor(0.0f);
 		for (int i = 0; i < raysPerPixel; i++) {
-			newColor += colors[index * raysPerPixel + i];
+			newColor += colors[idx * raysPerPixel + i];
 		}
-		image[index] += newColor / (float)raysPerPixel;
+		image[idx] += newColor / (float)raysPerPixel;
 	}
 }
 
@@ -458,7 +465,7 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 
 
 
-    int num_paths = pixelcount * raysPerPixel;
+  int num_paths = pixelcount * raysPerPixel;
 	if (iter == 0 || !cache1stBounce) {
 		checkCUDAError("before generate camera ray");
 		generateRayFromCamera <<<blocksPerGrid2d, blockSize2d >>>(cam, iter, traceDepth, dev_paths);
@@ -486,7 +493,7 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 		cudaMemset(dev_intersects, 0, pixelcount * sizeof(ShadeableIntersection));
 
 		// tracing
-		dim3 numblocksPathSegmentTracing = (raysPerPixel * num_paths + blockSize1d - 1) / blockSize1d; 
+		dim3 numblocksPathSegmentTracing = (num_paths + blockSize1d - 1) / blockSize1d; 
 		if (iter == 0 || i > 0 || !cache1stBounce) {
 			pathTraceOneBounce <<<numblocksPathSegmentTracing, blockSize1d>>> (
 					num_paths

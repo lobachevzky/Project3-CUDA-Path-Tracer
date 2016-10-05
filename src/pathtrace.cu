@@ -19,9 +19,9 @@
 
 #define sortByMaterial 0
 #define cache1stBounce 1
-#define raysPerPixelAxis 5
+#define raysPerPixelAxis 3
 #define raysPerPixel (raysPerPixelAxis * raysPerPixelAxis)
-#define camJitter 0.5f
+#define camJitter 0.0f
 #define depthOfField 8.0f
 
 #define DEBUG 1

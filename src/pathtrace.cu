@@ -19,7 +19,7 @@
 
 #define sortByMaterial 0
 #define cache1stBounce 0
-#define raysPerPixelAxis 2
+#define raysPerPixelAxis 1
 #define raysPerPixel (raysPerPixelAxis * raysPerPixelAxis)
 #define camJitter 0.3f
 #define depthOfField 8.0f
@@ -175,17 +175,15 @@ __global__ void generateRayFromCamera(
 
 	if (x < raysXAxis && y < raysYAxis) {
 
-    int pixelIdx = (cam.resolution.x * y / raysPerPixelAxis) + (x / raysPerPixelAxis);
+    // derive index for anti-aliasing
+    float pixel_x = x / raysPerPixelAxis;
+    float pixel_y = y / raysPerPixelAxis;
+    int pixelIdx = (cam.resolution.x * pixel_y) + pixel_x;
 
     int pixelOffset_x = x % raysPerPixelAxis;
     int pixelOffset_y = y % raysPerPixelAxis;
-
     int index = (pixelIdx * raysPerPixel) 
       + (raysPerPixelAxis * pixelOffset_y) + pixelOffset_x;
-
-    //debugN("pixel_x: %d, pixel_y: %d, pixelIdx: %d\n", pixel_x, pixel_y, pixelIdx);
-    //debugN("rayX: %d, rayY: %d\n", pixelOffset_x, pixelOffset_y);
-    //debugN("x: %d, y: %d\n", x, y);
 
 		PathSegment & segment = pathSegments[index];
 
@@ -334,14 +332,12 @@ __global__ void shadeMaterial (
 		Material material = materials[intersection.materialId];
 		segment.color *= material.color;
 
-    debugRefract("Shaded\n");
 
 		// If the material indicates that the object was a light, "light" the ray
 		if (material.emittance > 0.0f) {
 			segment.color *= material.emittance;
 			finalize(segment, colors);
 			glm::vec3 l = intersection.point;
-      debugRefract("Hit Light\n");
 		}
 		// Otherwise, rescatter.
 		else {
@@ -355,7 +351,6 @@ __global__ void shadeMaterial (
 			scatterRay(segment.ray, intersection, material, rng);
 			decrementBounces(segment, colors);
       if (segment.remainingBounces == 0) {
-        debugRefract("Out of Bounces\n");
       }
 
 		} // If there was no intersection, color the ray black.
@@ -366,7 +361,6 @@ __global__ void shadeMaterial (
 		segment.color *= 0; 
 		finalize(segment, colors);
 		glm::vec3 c = segment.color;
-    debugRefract("No Hit\n");
 	}
 }
 
@@ -453,16 +447,6 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
     //   for you.
 
     // TODO: perform one iteration of path tracing
-
-	//if (iter > 0) return;
-	//glm::vec3 v(1.0, 0.0, 0.0);
-	//glm::vec3 n(-1.0, -1.0, 0.0);
-	//glm::vec3 r = glm::refract(v, n, 0.5f); 
-	//debug("%f %f %f\n", r.x, r.y, r.z);
-	//r = glm::refract(r, n, 10000.0f);
-	//debug("%f %f %f\n", r.x, r.y, r.z);
-	//return;
-
 
 
   int num_paths = pixelcount * raysPerPixel;

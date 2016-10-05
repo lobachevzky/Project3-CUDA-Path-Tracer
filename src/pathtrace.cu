@@ -17,9 +17,12 @@
 
 #define ERRORCHECK 1
 
-#define sort_by_material 0
-#define cache_1st_bounce 0
-#define depth_blur_const 0.00f
+#define sortByMaterial 0
+#define cache1stBounce 0
+#define raysPerPixel 4
+#define camJitter 0.3f
+#define depthOfField 8.0f
+
 #define DEBUG 1
 #define lightIdx 170050
 #define refractIdx 310062
@@ -103,6 +106,7 @@ void pathtraceInit(Scene *scene) {
 	hst_scene = scene;
 	const Camera &cam = hst_scene->state.camera;
 	const int pixelcount = cam.resolution.x * cam.resolution.y;
+	const int num_rays = pixelcount * raysPerPixel;
 
 	cudaMalloc(&dev_image, pixelcount * sizeof(glm::vec3));
 	cudaMemset(dev_image, 0, pixelcount * sizeof(glm::vec3));
@@ -141,6 +145,18 @@ void pathtraceFree() {
     checkCUDAError("pathtraceFree");
 }
 
+__device__ int xyToPixelIdx(const int x, const int y, const int camResX) {
+	return x + (y * camResX);
+}
+
+__device__ int xFromPixelIdx(const int idx, const int camResX) {
+	return idx % camResX;
+}
+
+__device__ int yFromPixelIdx(const int idx, const int camResX) {
+	return idx / camResX;
+}
+
 /**
 	{
 
@@ -164,29 +180,28 @@ __global__ void generateRayFromCamera(
 	if (x < cam.resolution.x && y < cam.resolution.y) {
 
 
-		int index = x + (y * cam.resolution.x);
+		int index = xyToPixelIdx(x, y, cam.resolution.x);
 		PathSegment & segment = pathSegments[index];
 
 		thrust::default_random_engine rng = makeSeededRandomEngine(x, y, 0);
 		thrust::uniform_real_distribution<float> u01(0, 1);
 
-		float jx = u01(rng) * depth_blur_const;
-		float jy = u01(rng) * depth_blur_const;
-		float jz = u01(rng) * depth_blur_const;
-		glm::vec3 jitter(jx, jy, jz);
+		float jx = u01(rng) * camJitter;
+		float jy = u01(rng) * camJitter;
+		float jz = u01(rng) * camJitter;
+		glm::vec3 jitter(jx, jy, 0.0f);
 
 		segment.ray.origin = cam.position + jitter;
 		segment.color = glm::vec3(1.0f);
 
 		// TODO: implement antialiasing by jittering the ray
-		debugRefract("1 GRFC\n");
-		segment.ray.direction = glm::normalize(cam.view
+		glm::vec3 pixel_dir = cam.view
 			- cam.right * cam.pixelLength.x * ((float)x - (float)cam.resolution.x * 0.5f)
-			- cam.up * cam.pixelLength.y * ((float)y - (float)cam.resolution.y * 0.5f)
-			);
+			- cam.up * cam.pixelLength.y * ((float)y - (float)cam.resolution.y * 0.5f);
+		glm::vec3 pixel = cam.position + glm::normalize(pixel_dir) * depthOfField;
 
+		segment.ray.direction = glm::normalize(pixel - segment.ray.origin);
 		segment.pixelIndex = index;
-		int idx = index;
 		segment.remainingBounces = traceDepth;
 		segment.ray.insideObject = 0;
 	}
@@ -200,6 +215,7 @@ __global__ void pathTraceOneBounce(
 	, ShadeableIntersection * intersections
 	, const Material * materialArray
 	, const int iter
+	, Camera cam
 	)
 {
 	int path_index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -245,6 +261,19 @@ __global__ void pathTraceOneBounce(
 			hit_geom_index = i;
 			intersect_point = tmp_intersect;
 			normal = tmp_normal;
+		}
+
+		glm::vec3 o = segment.ray.origin;
+		if (hit_geom_index == 10 && iter == 0
+			&& abs(o.x - 0.0) < EPSILON 
+			&& abs(o.y - 5.0) < EPSILON 
+			&& abs(o.z - 10.5) < EPSILON)
+		{
+			glm::vec3 v = glm::normalize(segment.ray.direction) * nearest_distance;
+			glm::vec3 v_camNorm = glm::normalize(cam.view);
+			float v_cam = glm::dot(v_camNorm, v);
+			debug("nearest distance: %f\n", nearest_distance);
+			debug("distance: %f\n", v_cam);
 		}
 	}
 
@@ -322,7 +351,7 @@ __global__ void shadeMaterial (
 			}*/
 			thrust::default_random_engine rng = makeSeededRandomEngine(iter, idx, segment.remainingBounces);
 
-			scatterRay(segment.ray, intersection, material, rng, segment.pixelIndex, iter);
+			scatterRay(segment.ray, intersection, material, rng);
 			decrementBounces(segment, pixels);
 
 		} // If there was no intersection, color the ray black.
@@ -429,8 +458,7 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 
 
     int num_paths = pixelcount;
-	debug("size: %d\n", sizeof(PathSegment));
-	if (iter == 0 || !cache_1st_bounce) {
+	if (iter == 0 || !cache1stBounce) {
 		checkCUDAError("before generate camera ray");
 		generateRayFromCamera <<<blocksPerGrid2d, blockSize2d >>>(cam, iter, traceDepth, dev_paths);
 		checkCUDAError("generate camera ray");
@@ -458,7 +486,7 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 
 		// tracing
 		dim3 numblocksPathSegmentTracing = (pixelcount + blockSize1d - 1) / blockSize1d; // TODO: keeping this constant
-		if (iter == 0 || i > 0 || !cache_1st_bounce) {
+		if (iter == 0 || i > 0 || !cache1stBounce) {
 			pathTraceOneBounce <<<numblocksPathSegmentTracing, blockSize1d>>> (
 					num_paths
 				, dev_paths
@@ -467,17 +495,18 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 				, dev_intersects
 				, dev_materials
 				, iter
+				, cam
 			); 
 			checkCUDAError("trace one bounce");
 		}
 
-		if (iter == 0 && i == 0 && cache_1st_bounce) {
+		if (iter == 0 && i == 0 && cache1stBounce) {
 			cudaMemcpy(
 				dev_1stIntersects, dev_intersects, 
 				num_paths * sizeof(ShadeableIntersection), cudaMemcpyDeviceToDevice);
 			checkCUDAError("memCpy to dev_1stIntersects");
 		}
-		if (iter > 0 && i == 0 && cache_1st_bounce) {
+		if (iter > 0 && i == 0 && cache1stBounce) {
 			cudaMemcpy(
 				dev_intersects, dev_1stIntersects, 
 				num_paths * sizeof(ShadeableIntersection), cudaMemcpyDeviceToDevice);
@@ -493,7 +522,7 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 		// materials you have in the scenefile.
 		// TODO: compare between directly shading the path segments and shading
 		// path segments that have been reshuffled to be contiguous in memory.
-		if (sort_by_material) {
+		if (sortByMaterial) {
 			thrust::device_ptr<ShadeableIntersection> thrust_intersects(dev_intersects);
 			thrust::device_ptr<PathSegment> thrust_paths(dev_paths);
 			thrust::sort_by_key(

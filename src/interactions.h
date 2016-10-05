@@ -85,9 +85,7 @@ void scatterRay(
         Ray &ray,
 		ShadeableIntersection intersection,
         const Material &m,
-        thrust::default_random_engine &rand,
-		int index, 
-		int iter) {
+        thrust::default_random_engine &rand) {
     // TODO: implement this.
     // A basic implementation of pure-diffuse shading will just call the
     // calculateRandomDirectionInHemisphere defined above.
@@ -95,9 +93,9 @@ void scatterRay(
 	thrust::uniform_real_distribution<float> u01(0, 1);
 	int reflect, refract;
 	if (m.hasReflective > 0.0 && m.hasRefractive > 0) {
-		float ratio = m.hasReflective / m.hasRefractive;
-		reflect = 0.5 > u01(rand);
-		refract = !reflect;
+		float ratio = m.hasRefractive / m.hasReflective;
+		refract = exp(ratio)/(1 + exp(-ratio)) > u01(rand);
+		reflect = !refract;
 	}
 	else {
 		reflect = m.hasReflective > 0.0;
@@ -109,10 +107,7 @@ void scatterRay(
 	if (refract) { 
 		assert(m.hasRefractive > 0.0f);
 		ray.insideObject = !ray.insideObject;
-		debugRefract("insideObject: %d\n", ray.insideObject);
-		debugRefract("indexOfRefract: %d\n", m.indexOfRefraction);
-		//float eta = insideObject ? 1.0f / m.indexOfRefraction : m.indexOfRefraction;
-		float eta = ray.insideObject ? 0.66 : 1.5;
+		float eta = ray.insideObject ? 1.0 / m.indexOfRefraction : m.indexOfRefraction;
 		ray.direction = glm::refract(ray.direction, intersection.surfaceNormal, eta);
 	}
 	if (!reflect && !refract) {

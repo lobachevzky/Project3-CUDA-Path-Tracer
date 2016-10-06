@@ -14,7 +14,7 @@ For this project, I implemented part of a pathtracer, a program for rendering an
 Once a ray strikes an object (besides a light source), it bounces and a new path (origin and direction) must be calculated for it. My scatter function handles multiple cases:
 - When a material is fully reflective (ideal specular). This is the simplest of the cases: the ray is simply reflected such that the angle of incidence equals the angle of reflection.
 - When a material is fully diffuse, the ray bounces off at a completely random angle within the hemisphere defined by the surface normal. For example, if a ray bounces off an ordinary wall surface, it's new path is in a completely random direction, excluding paths that actually penetrate the wall.
-- When a material is diffractive, light penetrates the surface but bends based on the refraction index of the material <sup id="a2">[2](#f2)</sup>.
+- When a material is diffractive, light penetrates the surface but bends based on the refraction index of the material <sup id="2">[2](#f2)</sup>.
 - When a material is both refractive and reflective, the ray chooses randomly between refraction and reflection, using a distribution defined by the properties of the material (its ratio of "hasRefractive" to "hasReflective").
 
 ### Shading mechanism
@@ -26,4 +26,4 @@ Every time-step, rays may terminate by striking empty space or a light. A naive 
 
 <b id="f1">1</b> The distinction between iterations and time-steps may be a little confusing. Within a time-step, a light ray bounces (at most) once -- it moves from one surface to another or strikes empty space. In contrast, an iteration is only complete once all rays have terminated. This generally involves multiple time-steps and bounces. [↩](#1)
 
-<b id="f2">2</b> Technically the angle is defined by the _ratio_ of the refraction indices of the substances involved, e.g. air to water if the ray is entering water from the air. [↩](#a2)
+<b id="f2">2</b> Technically the angle is defined by the _ratio_ of the refraction indices of the substances involved, e.g. air to water if the ray is entering water from the air. [↩](#2)

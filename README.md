@@ -7,7 +7,7 @@ CUDA Path Tracer
 * Tested on: Windows 7, Intel(R) Xeon(R), GeForce GTX 1070 8GB (SIG Lab)
 
 ## Summary
-For this project, I implemented part of a pathtracer, a program for rendering an image of a 3D scene based on a specification with locations of shapes in space. Unlike a physical camera, which perceives objects by receiving light that has bounced off of them from a light source, a pathtracer follows the path of light in reverse: on each iteration, the program projects rays from the camera toward each pixel on the screen. With each time-step<sup id="1">[1](#f1)</sup>, the ray bounces off a surface and samples colors from it. The ray terminates if it strikes a light source, runs out of bounces, or strikes empty space.
+For this project, I implemented part of a pathtracer, a program for rendering an image of a scene, given the locations and attributes of shapes in 3D space. Unlike a physical camera, which perceives objects by capturing light that has bounced off of them from a light source, a pathtracer follows the path of light in reverse: on each iteration, the program projects rays from the camera toward each pixel on the screen. With each time-step<sup id="1">[1](#f1)</sup>, the ray bounces off a surface and samples colors from it. The ray terminates if it strikes a light source, runs out of bounces, or strikes empty space.
 
 ## Basic Features
 ### Scatter mechanism
@@ -22,7 +22,13 @@ A ray begins as white and as it strikes a material, multiplies its current color
 
 ## Optimizations
 ### Ray compaction
-Every time-step, rays may terminate by striking empty space or a light. A naive approach to handling these rays would be to set a flag indicating that they are no longer active and then check this flag at the start of the shading kernel (to prevent further coloration). The problem with this approach is that the threads assigned to these dead rays would be _wasted_. Instead, we perform stream compaction on the rays at the end of every time step to eliminate dead rays. In order to save the color assigned to these dead rays, whenever we terminate a ray, we first store its color in a separate array which we use to color the final image.
+Every time-step, rays may terminate by striking empty space or a light. A naive approach to handling these rays would be to set a flag indicating that they are no longer active and then check this flag at the start of the shading kernel (to prevent further coloration). The problem with this approach is that the threads assigned to these dead rays would be _wasted_. Instead, we perform stream compaction on the rays at the end of every time step to eliminate dead rays.
+
+A pitfall of this optimization (one which cost me many hours of debugging) is that stream-compaction mutates the compacted array. Consequently, dead rays must be saved somehow so that their colors can be rendered at the end of the iterations.
+
+One naive approach is to make a second array of pointers to the array of rays. Then we perform all operations, including stream compaction on the array of pointers instead of the array of rays. That way when we perform stream compaction, we only eliminate the pointers, not the rays themselves. Finally, once all pointers have been eliminated, we use the original array to render the image. 
+
+ Instead of performing stream compaction  In order to save the color assigned to these dead rays, whenever we terminate a ray, we first store its color in a separate array which we use to color the final image.
 
 ### Storing materials in contiguous memory
 When a ray strikes a surface, we must access that surface's material from global memory. By sorting rays by material type, we can increase the chances that a material has already been cached by a previously processed ray. In order to achieve this, we used `thrust::sort_by_key` to sort the rays by the materials associated with their corresponding surface intersections. Unfortunately, we found that this did not considerably improve performance:
@@ -51,7 +57,7 @@ I was also curious whether caching the first bounce would have negative effects 
 
 [no caching] [caching]
 
-This may be partially attributable to the use of antialiasing with nine samples per pixel.
+One nice feature about depth-of-field is that it has absolutely no impact on performance, although images employing depth-of-field benefit significantly from antialiasing, which does come at a significant cost in terms of performance.
 
 ### Antialiasing
 Antialiasing is a technique for smoothing an image by taking multiple samples at different locations per pixel. Instead of firing one ray at the center of its assigned pixel, we subdivide the pixel into equal cells and fire a ray at the center of each of those cells. Finally, when coloring the image, we average the colors assigned to each of the cells in a pixel. The result is as follows:

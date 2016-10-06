@@ -14,7 +14,7 @@ For this project, I implemented part of a pathtracer, a program for rendering an
 Once a ray strikes an object (besides a light source), it bounces and a new path (origin and direction) must be calculated for it. My scatter function handles multiple cases:
 - When a material is fully reflective (ideal specular). This is the simplest of the cases: the ray is simply reflected such that the angle of incidence equals the angle of reflection.
 - When a material is fully diffuse, the ray bounces off at a completely random angle within the hemisphere defined by the surface normal. For example, if a ray bounces off an ordinary wall surface, it's new path is in a completely random direction, excluding paths that actually penetrate the wall.
-- When a material is diffractive, light penetrates the surface but bends based on the refraction index of the material <sup id="1">[1](#f1)</sup>.
+- When a material is diffractive, light penetrates the surface but bends based on the refraction index of the material <sup id="a1">[1](#1)</sup>.
 - [link text][id]
 - When a material is both refractive and reflective, the ray chooses randomly between refraction and reflection, using a distribution defined by the properties of the material (its ratio of "hasRefractive" to "hasReflective").
 

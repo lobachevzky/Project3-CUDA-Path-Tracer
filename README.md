@@ -22,8 +22,46 @@ A ray begins as white and as it strikes a material, multiplies its current color
 
 ## Optimizations
 ### Ray compaction
-Every time-step, rays may terminate by striking empty space or a light. A naive approach to handling these rays would be to set a flag indicating that they are no longer active and then check this flag at the start of the shading kernel (to prevent further coloration). The problem with this approach is that the threads assigned to these dead rays would be _wasted_. Instead, we perform stream compaction on the rays at the end of every time step to eliminate
+Every time-step, rays may terminate by striking empty space or a light. A naive approach to handling these rays would be to set a flag indicating that they are no longer active and then check this flag at the start of the shading kernel (to prevent further coloration). The problem with this approach is that the threads assigned to these dead rays would be _wasted_. Instead, we perform stream compaction on the rays at the end of every time step to eliminate dead rays. In order to save the color assigned to these dead rays, whenever we terminate a ray, we first store its color in a separate array which we use to color the final image.
 
-<b id="f1">1</b> The distinction between iterations and time-steps may be a little confusing. Within a time-step, a light ray bounces (at most) once -- it moves from one surface to another or strikes empty space. In contrast, an iteration is only complete once all rays have terminated. This generally involves multiple time-steps and bounces. [↩](#1)
+### Storing materials in contiguous memory
+When a ray strikes a surface, we must access that surface's material from global memory. By sorting rays by material type, we can increase the chances that a material has already been cached by a previously processed ray. In order to achieve this, we used `thrust::sort_by_key` to sort the rays by the materials associated with their corresponding surface intersections. Unfortunately, we found that this did not considerably improve performance:
+
+**TODO**
+
+### Caching the first bounce
+In a typical pathtracer, all rays follow the same path, from the camera to their assigned pixel, on the first bounce. Consequently it is unnecessary to recalculate this first bounce every time. If the `cache1stBounce` is set to 1, then the program saves caches the first segment in `dev_1stpath` and the first intersection in `dev_1stIntersect`. This noticeably speeds up the program as indicated by:
+
+**TODO**
+
+## Extra Features
+### Refraction
+As mentioned in the section on the scatter mechanism, the program implements refraction in addition to reflection and diffuse scattering. The program only handles cases where light enters a refractive material from air or enters air from a refractive material. When the ray enters the refractive material, a toggle in the ray struct is set to `1`. If the ray strikes a refractive material from inside an object (as indicated by the toggle), the ratio of the indices of refraction is inverted -- this causes the light to bend back toward it's original direction as depicted in this image:
+
+**TODO**
+
+### Depth of field
+Because a lens can precisely focus at only one distance at a time, objects at different distances may appear out of focus. In order to implement this feature, we jittered the camera by applying a random, small offset to its position and then recalculating the direction of the ray from its new origin to its assigned pixel (not recalculating the direction just causes the entire image to become blurry). Here is a comparison of the image, with and without depth of field added:
+
+**TODO**
+
+I was also curious whether caching the first bounce would have negative effects on the depth of field effect. Without caching, the cameras is set to a new, random starting position on each iteration, whereas with caching, the camera always starts from the same random offset. Surprisingly, as the following comparison demonstrates, caching had no noticeable impact on the depth of blur effect
+
+**TODO**
+
+[no caching] [caching]
+
+This may be partially attributable to the use of antialiasing with nine samples per pixel.
+
+### Antialiasing
+Antialiasing is a technique for smoothing an image by taking multiple samples at different locations per pixel. Instead of firing one ray at the center of its assigned pixel, we subdivide the pixel into equal cells and fire a ray at the center of each of those cells. Finally, when coloring the image, we average the colors assigned to each of the cells in a pixel. The result is as follows:
+
+**TODO**
+
+Clearly, the depth of field technique especially benefits from the use of antialiasing. One of the drawbacks of depth of field is that the runtime and memory usage scales linearly with the number of samples per pixel. The impact on performance is indicated by the following graphic:
+
+**TODO**
+
+<b id="f1">1</b> The distinction between iterations and time-steps may be a little confusing. Within a time-step, a light ray bounces (at most) once -- it moves from one surface to another or strikes empty space. In contrast, an iteration is only complete once all rays have terminated. This generally involves multiple time-steps and bounces. The purpose of an iteration is to denoise an image by averaging over multiple possible random light paths. [↩](#1)
 
 <b id="f2">2</b> Technically the angle is defined by the _ratio_ of the refraction indices of the substances involved, e.g. air to water if the ray is entering water from the air. [↩](#2)

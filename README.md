@@ -86,6 +86,10 @@ One drawback of this approach is that multiple threads would be writing to the s
 
 Another space optimization would be to eliminate the "final gather" step by writing directly to the `dev_image` array. This would be possible given the previous optimization.       
 
+# Conclusion
+Here's a pretty picture with antialiasing x9 and lots of depth blur:
+![alt text] (https://github.com/lobachevzky/Project3-CUDA-Path-Tracer/blob/master/img/aa3.5blur.5000samp.png)
+
 <b id="f1">1</b> The distinction between iterations and time-steps may be a little confusing. Within a time-step, a light ray bounces (at most) once -- it moves from one surface to another or strikes empty space. In contrast, an iteration is only complete once all rays have terminated. This generally involves multiple time-steps and bounces. The purpose of an iteration is to de-noise an image by averaging over multiple possible random light paths. [↩](#1)
 
 <b id="f2">2</b> Technically the angle is defined by the _ratio_ of the refraction indices of the substances involved, e.g. air to water if the ray is entering water from the air. [↩](#2)

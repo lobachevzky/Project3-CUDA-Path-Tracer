@@ -37,14 +37,10 @@ A more performant approach is to maintain a separate array of color values in ad
 In the naive approach, every manipulation of rays involves following pointers through global memory. Specifically, for each ray, the naive approach retrieves the pointer from global memory and then follows that pointer to another address in global memory. These global memory accesses are extremely slow. The second approach accesses the rays directly in global memory instead of following pointers (one memory access instead of two) and only performs a second memory access to the color array if the ray terminates.
 
 ### Storing materials in contiguous memory
-When a ray strikes a surface, we must access that surface's material from global memory. By sorting rays by material type, we can increase the chances that a material has already been cached by a previously processed ray. In order to achieve this, we used `thrust::sort_by_key` to sort the rays by the materials associated with their corresponding surface intersections. Unfortunately, we found that this did not considerably improve performance:
-
-**TODO**
+When a ray strikes a surface, we must access that surface's material from global memory. If the same block accesses different materials in memory, then it is likely that some accesses will take longer than others. However, the entire block will have to wait on the slowest access. By sorting rays by material type, we can increase the chances that a block handles a single material and that all access times will be the same. This should increase hardware saturation. In order to achieve this, we used `thrust::sort_by_key` to sort the rays by the materials associated with their corresponding surface intersections. Unfortunately, we found that this did not improve performance at all: both programs performed with exactly 62.5% occupancy on the `shadeMaterial` function (the impacted function).
 
 ### Caching the first bounce
-In a typical pathtracer, all rays follow the same path on the first bounce: from the camera to their assigned pixel. Consequently it is unnecessary to recalculate this first bounce every time. If the `cache1stBounce` flag is set to 1, then the program caches the first segment in `dev_1stpath` and the first intersection in `dev_1stIntersect`. This noticeably speeds up the program as indicated by:
-
-**TODO**
+In a typical pathtracer, all rays follow the same path on the first bounce: from the camera to their assigned pixel. Consequently it is unnecessary to recalculate this first bounce every time. If the `cache1stBounce` flag is set to 1, then the program caches the first segment in `dev_1stpath` and the first intersection in `dev_1stIntersect`. On average, `generateRayFromCamera` takes 613.28 microseconds while `pathTraceOneBounce` takes a whopping 17,178.944 microseconds (17 milliseconds). By caching the first call to both of these functions, the program saves 17,792.224 microseconds (18 milliseconds) every iteration, almost 1/8th the runtime of an entire iteration.
 
 ## Extra Features
 ### Refraction
@@ -76,9 +72,7 @@ Antialiasing is a technique for smoothing an image by taking multiple samples at
 ![alt text] (https://github.com/lobachevzky/Project3-CUDA-Path-Tracer/blob/master/img/AANoAAComparison.png)
 The image on the left employs antialiasing x9 whereas the image on the right does not. Clearly, the depth of field technique especially benefits from the use of antialiasing.
 
-**Performance** One of the drawbacks of depth of field is that the number of threads and memory usage scales linearly with the number of samples per pixel. The GPU somewhat mitigates this because, on a CPU, none (or few) of these additional threads could be run in parallel. The impact on performance is indicated by the following graphic:
-
-**TODO**
+**Performance** One of the drawbacks of depth of field is that the number of threads and memory usage scales linearly with the number of samples per pixel. The GPU somewhat mitigates this because, on a CPU, none (or few) of these additional threads could be run in parallel.
 
 **Optimization** Instead of having a color array whose length is a multiple of the number of pixels, it would be possible for the color array to have as many elements as pixels if we averaged the colors in place. For example, in the current system, with antialiasing x4, the indices `[0, 1, 2, 3]` in the color array are assigned to pixel 0. Separate colors are assigned to each of these indices and then averaged in the "final gather" step (in which colors are actually assigned to `dev_image`, the image object). Instead, we could simply add the colors together in index 0 as their corresponding rays terminate.
 
@@ -88,6 +82,7 @@ Another space optimization would be to eliminate the "final gather" step by writ
 
 # Conclusion
 Here's a pretty picture with antialiasing x9 and lots of depth blur:
+
 ![alt text] (https://github.com/lobachevzky/Project3-CUDA-Path-Tracer/blob/master/img/aa3.5blur.5000samp.png)
 
 <b id="f1">1</b> The distinction between iterations and time-steps may be a little confusing. Within a time-step, a light ray bounces (at most) once -- it moves from one surface to another or strikes empty space. In contrast, an iteration is only complete once all rays have terminated. This generally involves multiple time-steps and bounces. The purpose of an iteration is to de-noise an image by averaging over multiple possible random light paths. [↩](#1)

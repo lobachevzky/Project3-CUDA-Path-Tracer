@@ -50,43 +50,41 @@ In a typical pathtracer, all rays follow the same path on the first bounce: from
 ### Refraction
 As mentioned in the section on the scatter mechanism, the program implements refraction in addition to reflection and diffuse scattering. The program only handles cases where light enters a refractive material from air or enters air from a refractive material. When the ray enters the refractive material, a toggle in the ray struct is set to `1`. If the ray strikes a refractive material from inside an object (as indicated by the toggle), the ratio of the indices of refraction is inverted -- this causes the light to bend back toward it's original direction as depicted in this image:
 
-**TODO**
+![alt text] (https://github.com/lobachevzky/Project3-CUDA-Path-Tracer/blob/master/img/light-refraction-glass.gif)
 
-**Performance** Refraction is not a performance-intensive feature. There is nothing GPU-specific about this feature. One way, however, that ray-scattering might generally be optimized is by storing `ShadeableIntersection` structs, which store information about the point where a ray intersects a surface, and `PathSegment` structs, which store information about the segment of a ray associated with a single bounce, in shared memory each time-step. This way,  subsequent accesses of these structs do not require calls to global memory. This is not difficult to implement since for the duration of a time-step, the arrays containing these structs are not reshuffled at all.
+**Performance:** Refraction is not a performance-intensive feature. There is nothing GPU-specific about this feature -- the feature would not perform any differently on a CPU. One way, however, that ray-scattering might generally be optimized is by storing `ShadeableIntersection` structs, which store information about the point where a ray intersects a surface, and `PathSegment` structs, which store information about the segment of a ray associated with a single bounce, in shared memory each time-step. This way,  subsequent accesses of these structs do not require calls to global memory. This is not difficult to implement since for the duration of a time-step, the arrays containing these structs are not reshuffled at all.
 
-**Optimization** The current implementation appears a little artificial -- in particular it is a little too clean. A more effective implementation would probably include elements of subsurface scattering. At the least, it might be nice to do more  combination of refraction, reflection, and diffusion.
+**Optimization:** With the current implementation, the image appears a looks to clean and a little artificial. A more effective implementation might include elements of subsurface scattering or at the least, it might benefit from random mixes of refraction, reflection, and diffusion.
 
 ### Depth of field
 Because a lens can precisely focus at only one distance at a time, objects at different distances may appear out of focus. In order to implement this feature, we jittered the camera by applying a random, small offset to its position and then recalculating the direction of the ray from its new origin to its assigned pixel (not recalculating the direction just causes the entire image to become blurry). Here is a comparison of the image, with and without depth of field added:
 
-**TODO**
+![alt text] (https://github.com/lobachevzky/Project3-CUDA-Path-Tracer/blob/master/img/blurNoBlurComparison.png)
 
-**Performance** Though depth-of-field does not inherently come with any performance costs, I was curious whether it would prevent us from using the first-bounce-caching optimization. Without caching, the cameras is set to a new, random starting position on each iteration, whereas with caching, the camera always starts from the same random offset. Surprisingly, as the following comparison demonstrates, caching had no noticeable impact on the depth of blur effect
+**Performance:** Depth-of-field does not inherently benefit from the use of a GPU or have any performance costs. However, I was curious whether it would not be compatible with the first-bounce-caching optimization. Without caching, the cameras is set to a new, random starting position on each iteration, whereas with caching, the camera always starts from the same random offset. Surprisingly, as the following comparison demonstrates, caching had no noticeable impact on the depth of blur effect:
 
-**Optimization** Even with antialiasing, depth-of-field still looks a little noisy. Instead of looking blurred, as they should, out-of-focus edges appear ragged and noisy. One solution is to use some kind of convolution to blur noisy areas.
+![alt text] (https://github.com/lobachevzky/Project3-CUDA-Path-Tracer/blob/master/img/aa3comparison.png)
+The image on the right uses the caching optimization whereas the image on the left does not.
 
-**TODO**
+**Optimization:** Even with antialiasing, out-of-focus edges appear ragged and noisy instead of looking blurred, as they should. One solution is to use some kind of convolution to blur noisy areas.
 
-[no caching] [caching]
-
-One nice feature about depth-of-field is that it has absolutely no impact on performance, although images employing depth-of-field benefit significantly from antialiasing, which does come at a significant cost in terms of performance.
+One nice feature of depth-of-field is that it has absolutely no impact on performance, although images employing depth-of-field benefit significantly from antialiasing, which does come at a significant cost in terms of performance.
 
 ### Antialiasing
 Antialiasing is a technique for smoothing an image by taking multiple samples at different locations per pixel. Instead of firing one ray at the center of its assigned pixel, we subdivide the pixel into equal cells and fire a ray at the center of each of those cells. Finally, when coloring the image, we average the colors assigned to each of the cells in a pixel. The result is as follows:
 
+![alt text] (https://github.com/lobachevzky/Project3-CUDA-Path-Tracer/blob/master/img/AANoAAComparison.png)
+The image on the left employs antialiasing x9 whereas the image on the right does not. Clearly, the depth of field technique especially benefits from the use of antialiasing.
+
+**Performance** One of the drawbacks of depth of field is that the number of threads and memory usage scales linearly with the number of samples per pixel. The GPU somewhat mitigates this because, on a CPU, none (or few) of these additional threads could be run in parallel. The impact on performance is indicated by the following graphic:
+
 **TODO**
 
-Clearly, the depth of field technique especially benefits from the use of antialiasing.
+**Optimization** Instead of having a color array whose length is a multiple of the number of pixels, it would be possible for the color array to have as many elements as pixels if we averaged the colors in place. For example, in the current system, with antialiasing x4, the indices `[0, 1, 2, 3]` in the color array are assigned to pixel 0. Separate colors are assigned to each of these indices and then averaged in the "final gather" step (in which colors are actually assigned to `dev_image`, the image object). Instead, we could simply add the colors together in index 0 as their corresponding rays terminate.
 
-**Performance** One of the drawbacks of depth of field is that the runtime and memory usage scales linearly with the number of samples per pixel. The impact on performance is indicated by the following graphic:
+One drawback of this approach is that multiple threads would be writing to the same global address in memory (index 0 in our example). Consequently, some kind of synchronization would be required to prevent race conditions. This is no slower than the current approach, which synchronously adds the separate colors in the final gather step.
 
-**TODO**
-
-**Optimization** Instead of having a color array whose length is a multiple of the number of pixels, it would be possible for the color array to have as many elements as pixels if we averaged the colors in place. For example, in the current system, if we antialias x4, then indices [0, 1, 2, 3] in the color array are reserved for pixel 0. Separate colors are assigned to each of these indices and then averaged in the "final gather" step (in which colors are actually assigned to `dev_image`, the image object). Instead, we could simply add the colors together in index 0 as they are assigned.
-
-One drawback of this approach is that multiple threads would be writing to the same global address in memory (index 0 in our example). Conseque ntly, some kind of synchronization would be required to prevent race conditions. This is no slower than the current approach, which synchronously adds the separate colors in the final gather step.
-
-Another space optimization would be to eliminate the "final gather" step by writing directly to the `dev_image` array. This would be possible given the previous optimization.
+Another space optimization would be to eliminate the "final gather" step by writing directly to the `dev_image` array. This would be possible given the previous optimization.       
 
 <b id="f1">1</b> The distinction between iterations and time-steps may be a little confusing. Within a time-step, a light ray bounces (at most) once -- it moves from one surface to another or strikes empty space. In contrast, an iteration is only complete once all rays have terminated. This generally involves multiple time-steps and bounces. The purpose of an iteration is to de-noise an image by averaging over multiple possible random light paths. [↩](#1)
 

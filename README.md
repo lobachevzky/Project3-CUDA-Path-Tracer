@@ -11,30 +11,30 @@ For this project, I implemented part of a pathtracer, a program for rendering an
 
 ## Basic Features
 ### Scatter mechanism
-Once a ray strikes an object (besides a light source), it bounces and a new path (origin and direction) must be calculated for it. My scatter function handles multiple cases:
-- When a material is fully reflective (ideal specular). This is the simplest of the cases: the ray is simply reflected such that the angle of incidence equals the angle of reflection.
-- When a material is fully diffuse, the ray bounces off at a completely random angle within the hemisphere defined by the surface normal. For example, if a ray bounces off an ordinary wall surface, it's new path is in a completely random direction, excluding paths that actually penetrate the wall.
-- When a material is diffractive, light penetrates the surface but bends based on the refraction index of the material <sup id="2">[2](#f2)</sup>.
+Once a ray strikes an object (besides a light source), it bounces and a new path (origin and direction) must be calculated. My scatter function handles multiple cases:
+- When a material is fully reflective (ideal specular). This is the simplest of the cases: the ray is simply reflected with the angle of incidence equal to the angle of reflection.
+- When a material is fully diffuse, the ray bounces off at a completely random angle within the hemisphere defined by the surface normal. For example, if a ray bounces off an ordinary wall surface, it's new path is in a random direction, excluding paths that actually penetrate the wall.
+- When a material is diffractive, light penetrates the surface but bends based on the refraction index of the material. <sup id="2">[2](#f2)</sup>
 - When a material is both refractive and reflective, the ray chooses randomly between refraction and reflection, using a distribution defined by the properties of the material (its ratio of "hasRefractive" to "hasReflective").
 
 ### Shading mechanism
-A ray begins as white and as it strikes a material, multiplies its current color by the material's color. If the ray strikes a light source, the accumulated color value is multiplied by the brightness of the light. If it strikes empty space or runs out of bounces, the color is set to black. This effect accounts for shadows, because surfaces that do not have a direct path to light have a lower chance of reflecting a ray into the light.
+A ray begins as white and as it strikes a material, multiplies its current color by the material's color. If the ray strikes a light source, the accumulated color value is multiplied by the brightness of the light. If it strikes empty space or runs out of bounces, the color is set to black. This effect accounts for shadows, because surfaces that do not have a direct path to a light source have a lower chance of reflecting a ray into it.
 
 ## Optimizations
 ### Ray compaction
-Every time-step, rays may terminate by striking empty space or a light. A naive approach to handling these rays would be to set a flag indicating that they are no longer active and then check this flag at the start of the shading kernel (to prevent further coloration). The problem with this approach is that the threads assigned to these dead rays would be _wasted_. Instead, we perform stream compaction on the rays at the end of every time step to eliminate dead rays.
+Every time-step, rays may terminate by striking empty space or a light. A naive approach to handling these rays would be to set a flag indicating that they are no longer active and then check this flag at the start of the shading kernel to prevent further coloration. The problem with this approach is that the threads assigned to these dead rays would be _wasted_. Instead, we perform stream compaction on the rays at the end of every time step to eliminate dead rays.
 
-A pitfall of this optimization (one which cost me many hours of debugging) is that stream-compaction mutates the compacted array. Consequently, dead rays must be saved somehow so that their colors can be rendered at the end of the iterations.
+A pitfall of this optimization (one which cost me many hours of debugging) is that stream-compaction mutates the compacted array. Consequently, dead rays must be saved somehow so that their colors can be rendered at the end of the iteration.
 
-One naive approach is to make a second array of pointers to the array of rays. Then we perform all operations, including stream compaction on the array of pointers instead of the array of rays. That way when we perform stream compaction, we only eliminate the pointers, not the rays themselves. Finally, once all pointers have been eliminated, we use the original array to render the image. This approach is depicted in this graphic:
+One naive approach is to make a second array of pointers to the array of rays. Then we perform all operations, including stream compaction on the array of pointers instead of the array of rays. When we perform stream compaction, we only eliminate the pointers, not the rays themselves. Finally, once all pointers have been eliminated, we use the original array to render the image. This approach is depicted in this graphic:
 
-**TODO**
+![alt text] (https://github.com/lobachevzky/Project3-CUDA-Path-Tracer/blob/master/ray-pointers/ray-pointers.001.png)
 
 A more performant approach is to maintain a separate array of color values in addition to the array of rays. Whenever we terminate a ray, we first store its color in the color array. Finally we use the color array to render the final image. This approach is depicted here:
 
-**TODO**
+![alt text] (https://github.com/lobachevzky/Project3-CUDA-Path-Tracer/blob/master/ray-pointers/ray-pointers.002.png)
 
-In the naive approach, every manipulation of rays involves following pointers through global memory. These global memory accesses are extremely slow. The advantage of our approach is that global memory is only
+In the naive approach, every manipulation of rays involves following pointers through global memory. Specifically, for each ray, the naive approach retrieves the pointer from global memory and then follows that pointer to another address in global memory. These global memory accesses are extremely slow. The second approach accesses the rays directly in global memory instead of following pointers (one memory access instead of two) and only performs a second memory access to the color array if the ray terminates.
 
 ### Storing materials in contiguous memory
 When a ray strikes a surface, we must access that surface's material from global memory. By sorting rays by material type, we can increase the chances that a material has already been cached by a previously processed ray. In order to achieve this, we used `thrust::sort_by_key` to sort the rays by the materials associated with their corresponding surface intersections. Unfortunately, we found that this did not considerably improve performance:
@@ -42,7 +42,7 @@ When a ray strikes a surface, we must access that surface's material from global
 **TODO**
 
 ### Caching the first bounce
-In a typical pathtracer, all rays follow the same path, from the camera to their assigned pixel, on the first bounce. Consequently it is unnecessary to recalculate this first bounce every time. If the `cache1stBounce` is set to 1, then the program saves caches the first segment in `dev_1stpath` and the first intersection in `dev_1stIntersect`. This noticeably speeds up the program as indicated by:
+In a typical pathtracer, all rays follow the same path on the first bounce: from the camera to their assigned pixel. Consequently it is unnecessary to recalculate this first bounce every time. If the `cache1stBounce` flag is set to 1, then the program caches the first segment in `dev_1stpath` and the first intersection in `dev_1stIntersect`. This noticeably speeds up the program as indicated by:
 
 **TODO**
 
@@ -84,7 +84,7 @@ Clearly, the depth of field technique especially benefits from the use of antial
 
 **Optimization** Instead of having a color array whose length is a multiple of the number of pixels, it would be possible for the color array to have as many elements as pixels if we averaged the colors in place. For example, in the current system, if we antialias x4, then indices [0, 1, 2, 3] in the color array are reserved for pixel 0. Separate colors are assigned to each of these indices and then averaged in the "final gather" step (in which colors are actually assigned to `dev_image`, the image object). Instead, we could simply add the colors together in index 0 as they are assigned.
 
-One drawback of this approach is that multiple threads would be writing to the same global address in memory (index 0 in our example). Consequently, some kind of synchronization would be required to prevent race conditions. This is no slower than the current approach, which synchronously adds the separate colors in the final gather step.
+One drawback of this approach is that multiple threads would be writing to the same global address in memory (index 0 in our example). Conseque ntly, some kind of synchronization would be required to prevent race conditions. This is no slower than the current approach, which synchronously adds the separate colors in the final gather step.
 
 Another space optimization would be to eliminate the "final gather" step by writing directly to the `dev_image` array. This would be possible given the previous optimization.
 

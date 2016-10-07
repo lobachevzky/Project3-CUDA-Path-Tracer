@@ -34,6 +34,7 @@ A more performant approach is to maintain a separate array of color values in ad
 
 **TODO**
 
+In the naive approach, every manipulation of rays involves following pointers through global memory. These global memory accesses are extremely slow. The advantage of our approach is that global memory is only
 
 ### Storing materials in contiguous memory
 When a ray strikes a surface, we must access that surface's material from global memory. By sorting rays by material type, we can increase the chances that a material has already been cached by a previously processed ray. In order to achieve this, we used `thrust::sort_by_key` to sort the rays by the materials associated with their corresponding surface intersections. Unfortunately, we found that this did not considerably improve performance:
@@ -51,14 +52,18 @@ As mentioned in the section on the scatter mechanism, the program implements ref
 
 **TODO**
 
-Refraction is not a performance-intensive feature. There is nothing GPU-specific about this feature. One way, however, that ray-scattering might generally be optimized is by storing `ShadeableIntersection` structs, which store information about the point where a ray intersects a surface, and `PathSegment` structs, which store information about the segment of a ray associated with a single bounce, in shared memory each time-step. This way,  subsequent accesses of these structs do not require calls to global memory. This is not difficult to implement since for the duration of a time-step, the arrays containing these structs are not reshuffled at all.
+**Performance** Refraction is not a performance-intensive feature. There is nothing GPU-specific about this feature. One way, however, that ray-scattering might generally be optimized is by storing `ShadeableIntersection` structs, which store information about the point where a ray intersects a surface, and `PathSegment` structs, which store information about the segment of a ray associated with a single bounce, in shared memory each time-step. This way,  subsequent accesses of these structs do not require calls to global memory. This is not difficult to implement since for the duration of a time-step, the arrays containing these structs are not reshuffled at all.
+
+**Optimization** The current implementation appears a little artificial -- in particular it is a little too clean. A more effective implementation would probably include elements of subsurface scattering. At the least, it might be nice to do more  combination of refraction, reflection, and diffusion.
 
 ### Depth of field
 Because a lens can precisely focus at only one distance at a time, objects at different distances may appear out of focus. In order to implement this feature, we jittered the camera by applying a random, small offset to its position and then recalculating the direction of the ray from its new origin to its assigned pixel (not recalculating the direction just causes the entire image to become blurry). Here is a comparison of the image, with and without depth of field added:
 
 **TODO**
 
-I was also curious whether caching the first bounce would have negative effects on the depth of field effect. Without caching, the cameras is set to a new, random starting position on each iteration, whereas with caching, the camera always starts from the same random offset. Surprisingly, as the following comparison demonstrates, caching had no noticeable impact on the depth of blur effect
+**Performance** Though depth-of-field does not inherently come with any performance costs, I was curious whether it would prevent us from using the first-bounce-caching optimization. Without caching, the cameras is set to a new, random starting position on each iteration, whereas with caching, the camera always starts from the same random offset. Surprisingly, as the following comparison demonstrates, caching had no noticeable impact on the depth of blur effect
+
+**Optimization** Even with antialiasing, depth-of-field still looks a little noisy. Instead of looking blurred, as they should, out-of-focus edges appear ragged and noisy. One solution is to use some kind of convolution to blur noisy areas.
 
 **TODO**
 
@@ -71,10 +76,18 @@ Antialiasing is a technique for smoothing an image by taking multiple samples at
 
 **TODO**
 
-Clearly, the depth of field technique especially benefits from the use of antialiasing. One of the drawbacks of depth of field is that the runtime and memory usage scales linearly with the number of samples per pixel. The impact on performance is indicated by the following graphic:
+Clearly, the depth of field technique especially benefits from the use of antialiasing.
+
+**Performance** One of the drawbacks of depth of field is that the runtime and memory usage scales linearly with the number of samples per pixel. The impact on performance is indicated by the following graphic:
 
 **TODO**
 
-<b id="f1">1</b> The distinction between iterations and time-steps may be a little confusing. Within a time-step, a light ray bounces (at most) once -- it moves from one surface to another or strikes empty space. In contrast, an iteration is only complete once all rays have terminated. This generally involves multiple time-steps and bounces. The purpose of an iteration is to denoise an image by averaging over multiple possible random light paths. [↩](#1)
+**Optimization** Instead of having a color array whose length is a multiple of the number of pixels, it would be possible for the color array to have as many elements as pixels if we averaged the colors in place. For example, in the current system, if we antialias x4, then indices [0, 1, 2, 3] in the color array are reserved for pixel 0. Separate colors are assigned to each of these indices and then averaged in the "final gather" step (in which colors are actually assigned to `dev_image`, the image object). Instead, we could simply add the colors together in index 0 as they are assigned.
+
+One drawback of this approach is that multiple threads would be writing to the same global address in memory (index 0 in our example). Consequently, some kind of synchronization would be required to prevent race conditions. This is no slower than the current approach, which synchronously adds the separate colors in the final gather step.
+
+Another space optimization would be to eliminate the "final gather" step by writing directly to the `dev_image` array. This would be possible given the previous optimization.
+
+<b id="f1">1</b> The distinction between iterations and time-steps may be a little confusing. Within a time-step, a light ray bounces (at most) once -- it moves from one surface to another or strikes empty space. In contrast, an iteration is only complete once all rays have terminated. This generally involves multiple time-steps and bounces. The purpose of an iteration is to de-noise an image by averaging over multiple possible random light paths. [↩](#1)
 
 <b id="f2">2</b> Technically the angle is defined by the _ratio_ of the refraction indices of the substances involved, e.g. air to water if the ray is entering water from the air. [↩](#2)

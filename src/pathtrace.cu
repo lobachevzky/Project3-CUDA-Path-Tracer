@@ -163,8 +163,8 @@ void pathtraceFree() {
 * lens effect - jitter ray origin positions based on a lens
 */
 __global__ void generateRayFromCamera(
-	const Camera cam, 
-	const int iter, 
+	const Camera cam,
+	const int iter,
 	const int traceDepth,
 	PathSegment* pathSegments)
 {
@@ -182,7 +182,7 @@ __global__ void generateRayFromCamera(
 
     int pixelOffset_x = x % raysPerPixelAxis;
     int pixelOffset_y = y % raysPerPixelAxis;
-    int index = (pixelIdx * raysPerPixel) 
+    int index = (pixelIdx * raysPerPixel)
       + (raysPerPixelAxis * pixelOffset_y) + pixelOffset_x;
 
 		PathSegment & segment = pathSegments[index];
@@ -357,8 +357,8 @@ __global__ void shadeMaterial (
 		// Lots of renderers use 4 channel color, RGBA, where A = alpha, often
 		// used for opacity, in which case they can indicate "no opacity".
 		// This can be useful for post-processing and image compositing.
-	} else { 
-		segment.color *= 0; 
+	} else {
+		segment.color *= 0;
 		finalize(segment, colors);
 		glm::vec3 c = segment.color;
 	}
@@ -455,13 +455,13 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 		generateRayFromCamera <<<blocksPerGrid2d, blockSize2d >>>(cam, iter, traceDepth, dev_paths);
 		checkCUDAError("generate camera ray");
 		cudaMemcpy(
-			dev_1stPaths, dev_paths, 
+			dev_1stPaths, dev_paths,
 			num_paths * sizeof(PathSegment), cudaMemcpyDeviceToDevice);
 		checkCUDAError("cudaMemcpy dev_paths to dev_1stPaths");
 	}
 	else {
 		cudaMemcpy(
-			dev_paths, dev_1stPaths, 
+			dev_paths, dev_1stPaths,
 			num_paths * sizeof(PathSegment), cudaMemcpyDeviceToDevice);
 	}
 
@@ -477,7 +477,7 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 		cudaMemset(dev_intersects, 0, pixelcount * sizeof(ShadeableIntersection));
 
 		// tracing
-		dim3 numblocksPathSegmentTracing = (num_paths + blockSize1d - 1) / blockSize1d; 
+		dim3 numblocksPathSegmentTracing = (num_paths + blockSize1d - 1) / blockSize1d;
 		if (iter == 0 || i > 0 || !cache1stBounce) {
 			pathTraceOneBounce <<<numblocksPathSegmentTracing, blockSize1d>>> (
 					num_paths
@@ -488,19 +488,19 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 				, dev_materials
 				, iter
 				, cam
-			); 
+			);
 			checkCUDAError("trace one bounce");
 		}
 
 		if (iter == 0 && i == 0 && cache1stBounce) {
 			cudaMemcpy(
-				dev_1stIntersects, dev_intersects, 
+				dev_1stIntersects, dev_intersects,
 				num_paths * sizeof(ShadeableIntersection), cudaMemcpyDeviceToDevice);
 			checkCUDAError("memCpy to dev_1stIntersects");
 		}
 		if (iter > 0 && i == 0 && cache1stBounce) {
 			cudaMemcpy(
-				dev_intersects, dev_1stIntersects, 
+				dev_intersects, dev_1stIntersects,
 				num_paths * sizeof(ShadeableIntersection), cudaMemcpyDeviceToDevice);
 			checkCUDAError("memCpy to dev_intersects");
 		}
@@ -545,8 +545,8 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 		num_paths = end_paths - thrust_paths;
 		checkCUDAError("after stream compaction");
 		if (num_paths == 0) {
-			iterationComplete = true; // TODO: should be based off stream compaction results. 
-		} 
+			iterationComplete = true; // TODO: should be based off stream compaction results.
+		}
 		i++;
 	}
 

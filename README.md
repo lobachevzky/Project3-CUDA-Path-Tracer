@@ -26,9 +26,14 @@ Every time-step, rays may terminate by striking empty space or a light. A naive 
 
 A pitfall of this optimization (one which cost me many hours of debugging) is that stream-compaction mutates the compacted array. Consequently, dead rays must be saved somehow so that their colors can be rendered at the end of the iterations.
 
-One naive approach is to make a second array of pointers to the array of rays. Then we perform all operations, including stream compaction on the array of pointers instead of the array of rays. That way when we perform stream compaction, we only eliminate the pointers, not the rays themselves. Finally, once all pointers have been eliminated, we use the original array to render the image. 
+One naive approach is to make a second array of pointers to the array of rays. Then we perform all operations, including stream compaction on the array of pointers instead of the array of rays. That way when we perform stream compaction, we only eliminate the pointers, not the rays themselves. Finally, once all pointers have been eliminated, we use the original array to render the image. This approach is depicted in this graphic:
 
- Instead of performing stream compaction  In order to save the color assigned to these dead rays, whenever we terminate a ray, we first store its color in a separate array which we use to color the final image.
+**TODO**
+
+A more performant approach is to maintain a separate array of color values in addition to the array of rays. Whenever we terminate a ray, we first store its color in the color array. Finally we use the color array to render the final image. This approach is depicted here:
+
+**TODO**
+
 
 ### Storing materials in contiguous memory
 When a ray strikes a surface, we must access that surface's material from global memory. By sorting rays by material type, we can increase the chances that a material has already been cached by a previously processed ray. In order to achieve this, we used `thrust::sort_by_key` to sort the rays by the materials associated with their corresponding surface intersections. Unfortunately, we found that this did not considerably improve performance:
@@ -45,6 +50,8 @@ In a typical pathtracer, all rays follow the same path, from the camera to their
 As mentioned in the section on the scatter mechanism, the program implements refraction in addition to reflection and diffuse scattering. The program only handles cases where light enters a refractive material from air or enters air from a refractive material. When the ray enters the refractive material, a toggle in the ray struct is set to `1`. If the ray strikes a refractive material from inside an object (as indicated by the toggle), the ratio of the indices of refraction is inverted -- this causes the light to bend back toward it's original direction as depicted in this image:
 
 **TODO**
+
+Refraction is not a performance-intensive feature. There is nothing GPU-specific about this feature. One way, however, that ray-scattering might generally be optimized is by storing `ShadeableIntersection` structs, which store information about the point where a ray intersects a surface, and `PathSegment` structs, which store information about the segment of a ray associated with a single bounce, in shared memory each time-step. This way,  subsequent accesses of these structs do not require calls to global memory. This is not difficult to implement since for the duration of a time-step, the arrays containing these structs are not reshuffled at all.
 
 ### Depth of field
 Because a lens can precisely focus at only one distance at a time, objects at different distances may appear out of focus. In order to implement this feature, we jittered the camera by applying a random, small offset to its position and then recalculating the direction of the ray from its new origin to its assigned pixel (not recalculating the direction just causes the entire image to become blurry). Here is a comparison of the image, with and without depth of field added:

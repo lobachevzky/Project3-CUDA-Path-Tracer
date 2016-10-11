@@ -1,6 +1,9 @@
 #include "main.h"
 #include "preview.h"
 #include <cstring>
+#include <time.h>
+#include <chrono>
+#include <ctime>
 #include <thrust/remove.h>
 #include <thrust/execution_policy.h>
 #include <thrust/device_ptr.h>
@@ -133,13 +136,21 @@ void runCuda() {
         pathtraceInit(scene);
     }
 
+	int i = 0;
     if (iteration < renderState->iterations) {
         uchar4 *pbo_dptr = NULL;
         cudaGLMapBufferObject((void**)&pbo_dptr, pbo);
 
+		std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
+
         // execute the kernel
         int frame = 0;
         pathtrace(pbo_dptr, frame, iteration);
+
+
+		std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
+		std::chrono::duration<double> time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
+		//std::cout << time_span.count() << std::endl;
 
         // unmap buffer object
         cudaGLUnmapBufferObject(pbo);

@@ -18,10 +18,10 @@
 #define ERRORCHECK 1
 
 #define sortByMaterial 0
-#define cache1stBounce 1
+#define cache1stBounce 0
 #define raysPerPixelAxis 3
 #define raysPerPixel (raysPerPixelAxis * raysPerPixelAxis)
-#define camJitter 0.0f
+#define camJitter 3.0f
 #define depthOfField 8.0f
 
 #define DEBUG 1
@@ -187,7 +187,7 @@ __global__ void generateRayFromCamera(
 
 		PathSegment & segment = pathSegments[index];
 
-		thrust::default_random_engine rng = makeSeededRandomEngine(x, y, 0);
+		thrust::default_random_engine rng = makeSeededRandomEngine(x, y, iter);
 		thrust::uniform_real_distribution<float> u01(0, 1);
 
 		float jx = u01(rng) * camJitter;

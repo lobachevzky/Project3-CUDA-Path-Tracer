@@ -57,7 +57,7 @@ Because a lens can precisely focus at only one distance at a time, objects at di
 
 ![alt text] (https://github.com/lobachevzky/Project3-CUDA-Path-Tracer/blob/master/img/blurNoBlurComparison.png)
 
-**Performance:** Depth-of-field does not inherently benefit from the use of a GPU or have any performance costs. However, I was curious whether it would not be compatible with the first-bounce-caching optimization. Without caching, the cameras is set to a new, random starting position on each iteration, whereas with caching, the camera always starts from the same random offset. Surprisingly, as the following comparison demonstrates, caching had no noticeable impact on the depth of blur effect:
+**Performance:** Depth-of-field does not inherently benefit from the use of a GPU or have any performance costs. However, I was curious whether it would not be compatible with the first-bounce-caching optimization. Without caching, the cameras is set to a new, random starting position on each iteration, whereas with caching, the camera always starts from the same random offset. This is the result of using depth-of-field with caching:
 
 ![alt text] (https://github.com/lobachevzky/Project3-CUDA-Path-Tracer/blob/master/img/aa3comparison.png)
 The image on the right uses the caching optimization whereas the image on the left does not.

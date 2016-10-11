@@ -6,6 +6,8 @@ CUDA Path Tracer
 * Ethan Brooks
 * Tested on: Windows 7, Intel(R) Xeon(R), GeForce GTX 1070 8GB (SIG Lab)
 
+![alt text] (https://github.com/lobachevzky/Project3-CUDA-Path-Tracer/blob/master/img/aa3.5blur.5000samp.png)
+
 ## Summary
 For this project, I implemented part of a pathtracer, a program for rendering an image of a scene, given the locations and attributes of shapes in 3D space. Unlike a physical camera, which perceives objects by capturing light that has bounced off of them from a light source, a pathtracer follows the path of light in reverse: on each iteration, the program projects rays from the camera toward each pixel on the screen. With each time-step<sup id="1">[1](#f1)</sup>, the ray bounces off a surface and samples colors from it. The ray terminates if it strikes a light source, runs out of bounces, or strikes empty space.
 
@@ -40,7 +42,9 @@ In the naive approach, every manipulation of rays involves following pointers th
 When a ray strikes a surface, we must access that surface's material from global memory. If the same block accesses different materials in memory, then it is likely that some accesses will take longer than others. However, the entire block will have to wait on the slowest access. By sorting rays by material type, we can increase the chances that a block handles a single material and that all access times will be the same. This should increase hardware saturation. In order to achieve this, we used `thrust::sort_by_key` to sort the rays by the materials associated with their corresponding surface intersections. Unfortunately, we found that this did not improve performance at all: both programs performed with exactly 62.5% occupancy on the `shadeMaterial` function (the impacted function).
 
 ### Caching the first bounce
-In a typical pathtracer, all rays follow the same path on the first bounce: from the camera to their assigned pixel. Consequently it is unnecessary to recalculate this first bounce every time. If the `cache1stBounce` flag is set to 1, then the program caches the first segment in `dev_1stpath` and the first intersection in `dev_1stIntersect`. On average, `generateRayFromCamera` takes 613.28 microseconds while `pathTraceOneBounce` takes a whopping 17,178.944 microseconds (17 milliseconds). By caching the first call to both of these functions, the program saves 17,792.224 microseconds (18 milliseconds) every iteration, almost 1/8th the runtime of an entire iteration.
+In a typical pathtracer, all rays follow the same path on the first bounce: from the camera to their assigned pixel. Consequently it is unnecessary to recalculate this first bounce every time. If the `cache1stBounce` flag is set to 1, then the program caches the first segment in `dev_1stpath` and the first intersection in `dev_1stIntersect`. On average, `generateRayFromCamera` takes 613.28 microseconds while `pathTraceOneBounce` takes a whopping 17,178.944 microseconds (17 milliseconds). By caching the first call to both of these functions, the program saves 17,792.224 microseconds (18 milliseconds) every iteration, almost 1/8th the runtime of an entire iteration. Here is a chart demonstrating the performance difference:
+
+![alt text] (https://github.com/lobachevzky/Project3-CUDA-Path-Tracer/blob/master/performance%20profiles/profiles_Page_1.png)
 
 ## Extra Features
 ### Refraction
@@ -72,7 +76,9 @@ Antialiasing is a technique for smoothing an image by taking multiple samples at
 ![alt text] (https://github.com/lobachevzky/Project3-CUDA-Path-Tracer/blob/master/img/AANoAAComparison.png)
 The image on the left employs antialiasing x9 whereas the image on the right does not. Clearly, the depth of field technique especially benefits from the use of antialiasing.
 
-**Performance** One of the drawbacks of depth of field is that the number of threads and memory usage scales linearly with the number of samples per pixel. The GPU somewhat mitigates this because, on a CPU, none (or few) of these additional threads could be run in parallel.
+**Performance** One of the drawbacks of depth of field is that the number of threads and memory usage scales linearly with the number of samples per pixel. The GPU somewhat mitigates this because, on a CPU, none (or few) of these additional threads could be run in parallel. Here is a chart comparing levels of antialiasing:
+
+![alt text] (https://github.com/lobachevzky/Project3-CUDA-Path-Tracer/blob/master/performance%20profiles/profiles_Page_3.png)
 
 **Optimization** Instead of having a color array whose length is a multiple of the number of pixels, it would be possible for the color array to have as many elements as pixels if we averaged the colors in place. For example, in the current system, with antialiasing x4, the indices `[0, 1, 2, 3]` in the color array are assigned to pixel 0. Separate colors are assigned to each of these indices and then averaged in the "final gather" step (in which colors are actually assigned to `dev_image`, the image object). Instead, we could simply add the colors together in index 0 as their corresponding rays terminate.
 
@@ -89,14 +95,9 @@ In reality, light rays do not bounce perfectly off of specular surfaces. Instead
 
 ### BlockSize analysis
 Here is a chart comparing performance across block sizes.
-![alt text] (https://github.com/lobachevzky/Project3-CUDA-Path-Tracer/blob/master/img/AANoAAComparison.png)
+![alt text] (https://github.com/lobachevzky/Project3-CUDA-Path-Tracer/blob/master/performance%20profiles/profiles_Page_2.png)
 
 It should be noted that these comparisons were done without antialiasing. With significant antialiasing, all block sizes threw an error except 128 and 256 and of these two, 128 was faster.
-
-# Conclusion
-Here's a pretty picture with antialiasing x9 and lots of depth blur:
-
-![alt text] (https://github.com/lobachevzky/Project3-CUDA-Path-Tracer/blob/master/img/aa3.5blur.5000samp.png)
 
 <b id="f1">1</b> The distinction between iterations and time-steps may be a little confusing. Within a time-step, a light ray bounces (at most) once -- it moves from one surface to another or strikes empty space. In contrast, an iteration is only complete once all rays have terminated. This generally involves multiple time-steps and bounces. The purpose of an iteration is to de-noise an image by averaging over multiple possible random light paths. [↩](#1)
 

@@ -19,7 +19,7 @@
 #define ERRORCHECK 1
 
 #define sortByMaterial 0
-#define cache1stBounce 0
+#define cache1stBounce 1
 #define raysPerPixelAxis 3
 #define raysPerPixel (raysPerPixelAxis * raysPerPixelAxis)
 #define camJitter 0.06f // angle in radians
@@ -210,7 +210,7 @@ __global__ void generateRayFromCamera(
 		glm::vec3 reverse_vector = glm::rotate((cam.position - pixel), camJitter, rand_normal);
 
 		//segment.ray.origin = cam.position + jitter;
-		segment.ray.origin = pixel + reverse_vector;
+		segment.ray.origin = camJitter > EPSILON ? pixel + reverse_vector : cam.position;
 		segment.color = glm::vec3(1.0f);
 		segment.ray.direction = glm::normalize(pixel - segment.ray.origin);
 		segment.colorIndex = index;

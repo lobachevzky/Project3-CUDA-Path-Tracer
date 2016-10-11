@@ -86,7 +86,7 @@ void scatterRay(
         Ray &ray,
 		ShadeableIntersection intersection,
         const Material &m,
-        thrust::default_random_engine &rand) {
+        thrust::default_random_engine &rng) {
     // TODO: implement this.
     // A basic implementation of pure-diffuse shading will just call the
     // calculateRandomDirectionInHemisphere defined above.
@@ -95,7 +95,7 @@ void scatterRay(
 	int reflect, refract;
 	if (m.hasReflective > 0.0 && m.hasRefractive > 0) {
 		float ratio = m.hasRefractive / m.hasReflective;
-		refract = exp(ratio)/(1 + exp(-ratio)) > u01(rand);
+		refract = exp(ratio)/(1 + exp(-ratio)) > u01(rng);
 		reflect = !refract;
 	}
 	else {
@@ -103,7 +103,14 @@ void scatterRay(
 		refract = m.hasRefractive > 0.0;
 	}
 	if (reflect) {
-		ray.direction = glm::reflect(ray.direction, intersection.surfaceNormal);
+		glm::vec3 reflection = glm::reflect(ray.direction, intersection.surfaceNormal);
+
+		float jx = u01(rng) * 1.0;
+		float jy = u01(rng) * 1.0;
+		float jz = u01(rng) * 1.0;
+
+		glm::vec3 rand_normal(jx, jy, jz);
+		ray.direction = glm::rotate(reflection, specularNoise, rand_normal);
 	}
 	if (refract) { 
 		assert(m.hasRefractive > 0.0f);
@@ -112,7 +119,7 @@ void scatterRay(
 		ray.direction = glm::refract(ray.direction, intersection.surfaceNormal, eta);
 	}
 	if (!reflect && !refract) {
-		ray.direction = calculateRandomDirectionInHemisphere(intersection.surfaceNormal, rand);
+		ray.direction = calculateRandomDirectionInHemisphere(intersection.surfaceNormal, rng);
 	} 
 	ray.origin = intersection.point + (ray.direction * EPSILON);
 }

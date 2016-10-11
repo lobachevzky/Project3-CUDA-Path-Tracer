@@ -20,7 +20,7 @@
 
 #define sortByMaterial 0
 #define cache1stBounce 0
-#define raysPerPixelAxis 3
+#define raysPerPixelAxis 1
 #define raysPerPixel (raysPerPixelAxis * raysPerPixelAxis)
 #define camJitter 0.06f // angle in radians
 #define depthOfField 8.0f
@@ -206,7 +206,7 @@ __global__ void generateRayFromCamera(
 		float jy = u01(rng) * camJitter;
 		float jz = u01(rng) * camJitter;
 
-		glm::vec3 rand_normal(jx, jy, 0.0f);
+		glm::vec3 rand_normal(jx, jy, jz);
 		glm::vec3 reverse_vector = glm::rotate((cam.position - pixel), camJitter, rand_normal);
 
 		//segment.ray.origin = cam.position + jitter;
@@ -419,7 +419,7 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 					(cam.resolution.y * raysPerPixelAxis + blockSize2d.y - 1) / blockSize2d.y);
 
 	// 1D block for path tracing
-	const int blockSize1d = 1024; //128;
+	const int blockSize1d = 128;
 
     ///////////////////////////////////////////////////////////////////////////
 

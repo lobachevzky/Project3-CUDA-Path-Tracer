@@ -19,11 +19,11 @@
 #define ERRORCHECK 1
 
 #define sortByMaterial 0
-#define cache1stBounce 1
-#define raysPerPixelAxis 3
+#define cache1stBounce 0
+#define raysPerPixelAxis 2
 #define raysPerPixel (raysPerPixelAxis * raysPerPixelAxis)
 #define camJitter 0.06f // angle in radians
-#define depthOfField 8.0f
+#define depthOfField 2.0f
 
 #define DEBUG 1
 #define lightIdx 170050

@@ -6,7 +6,7 @@ CUDA Path Tracer
 * Ethan Brooks
 * Tested on: Windows 7, Intel(R) Xeon(R), GeForce GTX 1070 8GB (SIG Lab)
 
-![alt text] (https://github.com/lobachevzky/Project3-CUDA-Path-Tracer/blob/master/img/aa3.5blur.5000samp.png)
+![alt text] (https://github.com/lobachevzky/Project3-CUDA-Path-Tracer/blob/master/img/aa3dof.png)
 
 ## Summary
 For this project, I implemented part of a pathtracer, a program for rendering an image of a scene, given the locations and attributes of shapes in 3D space. Unlike a physical camera, which perceives objects by capturing light that has bounced off of them from a light source, a pathtracer follows the path of light in reverse: on each iteration, the program projects rays from the camera toward each pixel on the screen. With each time-step<sup id="1">[1](#f1)</sup>, the ray bounces off a surface and samples colors from it. The ray terminates if it strikes a light source, runs out of bounces, or strikes empty space.

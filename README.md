@@ -74,7 +74,7 @@ One nice feature of depth-of-field is that it has absolutely no impact on perfor
 Antialiasing is a technique for smoothing an image by taking multiple samples at different locations per pixel. Instead of firing one ray at the center of its assigned pixel, we subdivide the pixel into equal cells and fire a ray at the center of each of those cells. Finally, when coloring the image, we average the colors assigned to each of the cells in a pixel. The result is as follows:
 
 ![alt text] (https://github.com/lobachevzky/Project3-CUDA-Path-Tracer/blob/master/img/AANoAAComparison.png)
-The image on the left employs antialiasing x9 whereas the image on the right does not. Clearly, the depth of field technique especially benefits from the use of antialiasing.
+The image on the right employs antialiasing x9 whereas the image on the left does not. The difference is evident in the amount of noise in the left image.
 
 **Performance** One of the drawbacks of depth of field is that the number of threads and memory usage scales linearly with the number of samples per pixel. The GPU somewhat mitigates this because, on a CPU, none (or few) of these additional threads could be run in parallel. Here is a chart comparing levels of antialiasing:
 

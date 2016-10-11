@@ -40,7 +40,9 @@ In the naive approach, every manipulation of rays involves following pointers th
 When a ray strikes a surface, we must access that surface's material from global memory. If the same block accesses different materials in memory, then it is likely that some accesses will take longer than others. However, the entire block will have to wait on the slowest access. By sorting rays by material type, we can increase the chances that a block handles a single material and that all access times will be the same. This should increase hardware saturation. In order to achieve this, we used `thrust::sort_by_key` to sort the rays by the materials associated with their corresponding surface intersections. Unfortunately, we found that this did not improve performance at all: both programs performed with exactly 62.5% occupancy on the `shadeMaterial` function (the impacted function).
 
 ### Caching the first bounce
-In a typical pathtracer, all rays follow the same path on the first bounce: from the camera to their assigned pixel. Consequently it is unnecessary to recalculate this first bounce every time. If the `cache1stBounce` flag is set to 1, then the program caches the first segment in `dev_1stpath` and the first intersection in `dev_1stIntersect`. On average, `generateRayFromCamera` takes 613.28 microseconds while `pathTraceOneBounce` takes a whopping 17,178.944 microseconds (17 milliseconds). By caching the first call to both of these functions, the program saves 17,792.224 microseconds (18 milliseconds) every iteration, almost 1/8th the runtime of an entire iteration.
+In a typical pathtracer, all rays follow the same path on the first bounce: from the camera to their assigned pixel. Consequently it is unnecessary to recalculate this first bounce every time. If the `cache1stBounce` flag is set to 1, then the program caches the first segment in `dev_1stpath` and the first intersection in `dev_1stIntersect`. On average, `generateRayFromCamera` takes 613.28 microseconds while `pathTraceOneBounce` takes a whopping 17,178.944 microseconds (17 milliseconds). By caching the first call to both of these functions, the program saves 17,792.224 microseconds (18 milliseconds) every iteration, almost 1/8th the runtime of an entire iteration. Here is a chart demonstrating the performance difference:
+
+![alt text] (https://github.com/lobachevzky/Project3-CUDA-Path-Tracer/blob/master/img/light-refraction-glass.gif)
 
 ## Extra Features
 ### Refraction
@@ -72,7 +74,9 @@ Antialiasing is a technique for smoothing an image by taking multiple samples at
 ![alt text] (https://github.com/lobachevzky/Project3-CUDA-Path-Tracer/blob/master/img/AANoAAComparison.png)
 The image on the left employs antialiasing x9 whereas the image on the right does not. Clearly, the depth of field technique especially benefits from the use of antialiasing.
 
-**Performance** One of the drawbacks of depth of field is that the number of threads and memory usage scales linearly with the number of samples per pixel. The GPU somewhat mitigates this because, on a CPU, none (or few) of these additional threads could be run in parallel.
+**Performance** One of the drawbacks of depth of field is that the number of threads and memory usage scales linearly with the number of samples per pixel. The GPU somewhat mitigates this because, on a CPU, none (or few) of these additional threads could be run in parallel. Here is a chart comparing levels of antialiasing:
+
+![alt text] (https://github.com/lobachevzky/Project3-CUDA-Path-Tracer/blob/master/img/AANoAAComparison.png)
 
 **Optimization** Instead of having a color array whose length is a multiple of the number of pixels, it would be possible for the color array to have as many elements as pixels if we averaged the colors in place. For example, in the current system, with antialiasing x4, the indices `[0, 1, 2, 3]` in the color array are assigned to pixel 0. Separate colors are assigned to each of these indices and then averaged in the "final gather" step (in which colors are actually assigned to `dev_image`, the image object). Instead, we could simply add the colors together in index 0 as their corresponding rays terminate.
 

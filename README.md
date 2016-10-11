@@ -63,7 +63,7 @@ Because a lens can precisely focus at only one distance at a time, objects at di
 
 **Performance:** Depth-of-field does not inherently benefit from the use of a GPU or have any performance costs. However, I was curious whether it would not be compatible with the first-bounce-caching optimization. Without caching, the cameras is set to a new, random starting position on each iteration, whereas with caching, the camera always starts from the same random offset. This is the result of using depth-of-field with caching:
 
-![alt text] (https://github.com/lobachevzky/Project3-CUDA-Path-Tracer/blob/master/img/aa3comparison.png)
+![alt text] (https://github.com/lobachevzky/Project3-CUDA-Path-Tracer/blob/master/img/cachingNoCachingComparison.png)
 The image on the right uses the caching optimization whereas the image on the left does not.
 
 **Optimization:** Even with antialiasing, out-of-focus edges appear ragged and noisy instead of looking blurred, as they should. One solution is to use some kind of convolution to blur noisy areas.

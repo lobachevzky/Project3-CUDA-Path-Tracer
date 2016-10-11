@@ -150,7 +150,7 @@ void runCuda() {
 
 		std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
 		std::chrono::duration<double> time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-		std::cout << time_span.count() << std::endl;
+		//std::cout << time_span.count() << std::endl;
 
         // unmap buffer object
         cudaGLUnmapBufferObject(pbo);

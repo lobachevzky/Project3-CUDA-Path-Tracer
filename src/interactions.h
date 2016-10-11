@@ -5,6 +5,7 @@
 #define lightIdx 170050
 #define refractIdx 310062
 #define printIters 2
+#define specularNoise 0.02f
 
 #if DEBUG
 #define debug(...) if (iter < printIters) { printf(__VA_ARGS__); }

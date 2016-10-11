@@ -10,6 +10,7 @@
 #include "scene.h"
 #include "glm/glm.hpp"
 #include "glm/gtx/norm.hpp"
+#include "glm/gtx/rotate_vector.hpp"
 #include "utilities.h"
 #include "pathtrace.h"
 #include "intersections.h"
@@ -21,7 +22,7 @@
 #define cache1stBounce 0
 #define raysPerPixelAxis 3
 #define raysPerPixel (raysPerPixelAxis * raysPerPixelAxis)
-#define camJitter 3.0f
+#define camJitter 0.06f // angle in radians
 #define depthOfField 8.0f
 
 #define DEBUG 1
@@ -190,13 +191,6 @@ __global__ void generateRayFromCamera(
 		thrust::default_random_engine rng = makeSeededRandomEngine(x, y, iter);
 		thrust::uniform_real_distribution<float> u01(0, 1);
 
-		float jx = u01(rng) * camJitter;
-		float jy = u01(rng) * camJitter;
-		float jz = u01(rng) * camJitter;
-		glm::vec3 jitter(jx, jy, 0.0f);
-
-		segment.ray.origin = cam.position + jitter;
-		segment.color = glm::vec3(1.0f);
 
 		// TODO: implement antialiasing by jittering the ray
 
@@ -208,6 +202,16 @@ __global__ void generateRayFromCamera(
 
 		glm::vec3 pixel = cam.position + glm::normalize(pixel_dir) * depthOfField;
 
+		float jx = u01(rng) * camJitter;
+		float jy = u01(rng) * camJitter;
+		float jz = u01(rng) * camJitter;
+
+		glm::vec3 rand_normal(jx, jy, 0.0f);
+		glm::vec3 reverse_vector = glm::rotate((cam.position - pixel), camJitter, rand_normal);
+
+		//segment.ray.origin = cam.position + jitter;
+		segment.ray.origin = pixel + reverse_vector;
+		segment.color = glm::vec3(1.0f);
 		segment.ray.direction = glm::normalize(pixel - segment.ray.origin);
 		segment.colorIndex = index;
 		segment.remainingBounces = traceDepth;
@@ -415,7 +419,7 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 					(cam.resolution.y * raysPerPixelAxis + blockSize2d.y - 1) / blockSize2d.y);
 
 	// 1D block for path tracing
-	const int blockSize1d = 128;
+	const int blockSize1d = 1024; //128;
 
     ///////////////////////////////////////////////////////////////////////////
 

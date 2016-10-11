@@ -196,7 +196,7 @@ SCALE       1 1 1
 OBJECT 14
 sphere
 material 1  // white
-TRANS       -1.5 5 -2
+TRANS       -1.5 5 -3
 ROTAT       0 0 0
 SCALE       1 1 1
 

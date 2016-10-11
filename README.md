@@ -87,11 +87,13 @@ One drawback of this approach is that multiple threads would be writing to the s
 Another space optimization would be to eliminate the "final gather" step by writing directly to the `dev_image` array. This would be possible given the previous optimization.       
 
 ### Specular noise
-In reality, light rays do not bounce perfectly off of specular surfaces. Instead, they reflect randomly within a cone centered on the perfect reflection. Here is a comparison of the a reflective surface with and without specular noise:
+In reality, light rays do not bounce perfectly off of specular surfaces. Instead, they reflect randomly within a cone centered on the perfect reflection. This zoomed in image shows the result of specular noise:
 
-![alt text] (https://github.com/lobachevzky/Project3-CUDA-Path-Tracer/blob/master/img/AANoAAComparison.png)
+![alt text] (https://github.com/lobachevzky/Project3-CUDA-Path-Tracer/blob/master/img/reflectionZoom.png)
 
 **Performance** Specular noise has no effect on performance. The only impact is that some additional computation needs to be performed on reflective rays.
+
+**Optimization** Ideally specular noise would vary across a surface to reflect the mottled character of most physical surfaces.
 
 ### BlockSize analysis
 Here is a chart comparing performance across block sizes.
